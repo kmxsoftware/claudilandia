@@ -343,7 +343,7 @@ async function init() {
 
   // Load terminal theme
   const terminalTheme = await GetTerminalTheme();
-  state.terminalTheme = terminalTheme || 'claude';
+  state.terminalTheme = terminalTheme || 'dracula';
 
   // Setup event listeners for terminal output with project context
   // Flow control using HIGH/LOW watermarks to prevent xterm.js buffer overflow

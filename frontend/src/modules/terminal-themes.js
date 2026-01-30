@@ -244,7 +244,7 @@ export const terminalThemes = {
  * @returns {object} Theme object with displayName, color, and theme properties
  */
 export function getTerminalTheme(themeName) {
-  return terminalThemes[themeName] || terminalThemes.claude;
+  return terminalThemes[themeName] || terminalThemes.dracula;
 }
 
 /**

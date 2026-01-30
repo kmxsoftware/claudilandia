@@ -1185,7 +1185,7 @@ func (m *Manager) GetTerminalTheme() string {
 	defer m.mu.RUnlock()
 
 	if m.state.TerminalTheme == "" {
-		return "claude" // default theme
+		return "dracula" // default theme
 	}
 	return m.state.TerminalTheme
 }

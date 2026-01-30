@@ -445,7 +445,7 @@ func (a *App) ResumeTerminal(id string) {
 // GetTerminalTheme returns the current terminal theme name
 func (a *App) GetTerminalTheme() string {
 	if a.stateManager == nil {
-		return "claude"
+		return "dracula"
 	}
 	return a.stateManager.GetTerminalTheme()
 }
