@@ -24,6 +24,10 @@ type Terminal struct {
 	mu       sync.Mutex
 	onOutput func(id string, data []byte)
 	onExit   func(id string)
+	// Flow control
+	pauseCh  chan struct{}
+	resumeCh chan struct{}
+	isPaused bool
 }
 
 // Manager manages multiple terminal sessions
@@ -97,6 +101,9 @@ func (m *Manager) CreateWithID(id, name, workDir string) (*Terminal, error) {
 		running:  true,
 		onOutput: m.onOutput,
 		onExit:   m.onExit,
+		pauseCh:  make(chan struct{}, 1),
+		resumeCh: make(chan struct{}, 1),
+		isPaused: false,
 	}
 
 	m.terminals[term.ID] = term
@@ -178,11 +185,71 @@ func (m *Manager) Resize(id string, rows, cols uint16) error {
 	return term.Resize(rows, cols)
 }
 
+// Pause pauses PTY output reading (flow control)
+func (m *Manager) Pause(id string) {
+	term := m.Get(id)
+	if term != nil {
+		term.Pause()
+	}
+}
+
+// Resume resumes PTY output reading (flow control)
+func (m *Manager) Resume(id string) {
+	term := m.Get(id)
+	if term != nil {
+		term.Resume()
+	}
+}
+
 // Terminal methods
+
+// Pause pauses the terminal output reading (flow control)
+func (t *Terminal) Pause() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.isPaused {
+		t.isPaused = true
+		// Non-blocking send - if channel is full, pause is already pending
+		select {
+		case t.pauseCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// Resume resumes the terminal output reading (flow control)
+func (t *Terminal) Resume() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.isPaused {
+		t.isPaused = false
+		// Non-blocking send - signal resume
+		select {
+		case t.resumeCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// IsPaused returns whether the terminal is currently paused
+func (t *Terminal) IsPaused() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.isPaused
+}
 
 func (t *Terminal) readOutput() {
 	buf := make([]byte, 4096)
 	for {
+		// Check if paused - wait for resume signal
+		select {
+		case <-t.pauseCh:
+			// We're paused, wait for resume
+			<-t.resumeCh
+		default:
+			// Not paused, continue reading
+		}
+
 		n, err := t.Pty.Read(buf)
 		if err != nil {
 			if err != io.EOF {

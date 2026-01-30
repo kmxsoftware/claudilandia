@@ -1178,3 +1178,27 @@ func (m *Manager) SetApprovedClients(clients interface{}) {
 	m.mu.Unlock()
 	m.Save()
 }
+
+// GetTerminalTheme returns the current terminal theme name
+func (m *Manager) GetTerminalTheme() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.state.TerminalTheme == "" {
+		return "claude" // default theme
+	}
+	return m.state.TerminalTheme
+}
+
+// SetTerminalTheme sets the terminal theme for all terminals
+func (m *Manager) SetTerminalTheme(themeName string) {
+	m.mu.Lock()
+	m.state.TerminalTheme = themeName
+	m.mu.Unlock()
+	m.Save()
+
+	// Emit event to notify frontend
+	if m.ctx != nil {
+		runtime.EventsEmit(m.ctx, "state:terminal:theme", themeName)
+	}
+}

@@ -165,6 +165,8 @@ export function GetTemplateRules():Promise<Array<claude.TemplateItem>>;
 
 export function GetTemplateSkills():Promise<Array<claude.TemplateItem>>;
 
+export function GetTerminalTheme():Promise<string>;
+
 export function GetTerminals():Promise<Array<main.TerminalInfo>>;
 
 export function GetTestDiscovery(arg1:string):Promise<testing.TestDiscovery>;
@@ -203,6 +205,8 @@ export function IsTestRunning():Promise<boolean>;
 
 export function Log(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<void>;
 
+export function PauseTerminal(arg1:string):Promise<void>;
+
 export function ReadFileContent(arg1:string):Promise<string>;
 
 export function RefreshNgrokURL():Promise<string>;
@@ -229,6 +233,8 @@ export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void
 
 export function RestartContainer(arg1:string):Promise<void>;
 
+export function ResumeTerminal(arg1:string):Promise<void>;
+
 export function SaveAgentContent(arg1:string,arg2:string):Promise<void>;
 
 export function SaveClaudemd(arg1:string,arg2:string):Promise<void>;
@@ -252,6 +258,8 @@ export function SelectDirectory():Promise<string>;
 export function SetActiveProject(arg1:string):Promise<void>;
 
 export function SetActiveTerminal(arg1:string,arg2:string):Promise<void>;
+
+export function SetTerminalTheme(arg1:string):Promise<void>;
 
 export function StartContainer(arg1:string):Promise<void>;
 

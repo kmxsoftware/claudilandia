@@ -972,6 +972,7 @@ export namespace state {
 	    globalPrompts: Prompt[];
 	    globalPromptCategories: PromptCategory[];
 	    approvedRemoteClients: ApprovedRemoteClient[];
+	    terminalTheme: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
@@ -985,6 +986,7 @@ export namespace state {
 	        this.globalPrompts = this.convertValues(source["globalPrompts"], Prompt);
 	        this.globalPromptCategories = this.convertValues(source["globalPromptCategories"], PromptCategory);
 	        this.approvedRemoteClients = this.convertValues(source["approvedRemoteClients"], ApprovedRemoteClient);
+	        this.terminalTheme = source["terminalTheme"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

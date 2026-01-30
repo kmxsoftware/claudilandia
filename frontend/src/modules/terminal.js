@@ -4,7 +4,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { state, getTerminals } from './state.js';
 import { createModuleLogger } from './logger.js';
 import { textToBase64 } from './utils.js';
-import { removeHistoryBuffer } from './terminal-history.js';
+import { terminalThemes, getTerminalTheme } from './terminal-themes.js';
 
 const logger = createModuleLogger('Terminal');
 import {
@@ -12,7 +12,9 @@ import {
   WriteTerminal,
   ResizeTerminal,
   CloseTerminal,
-  SetActiveTerminal
+  SetActiveTerminal,
+  GetTerminalTheme,
+  SetTerminalTheme
 } from '../../wailsjs/go/main/App';
 import { OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime';
 import { registerStateHandler } from './project-switcher.js';
@@ -138,7 +140,8 @@ export async function createTerminal() {
       return;
     }
 
-    // Create xterm instance - styled like Claude CLI
+    // Create xterm instance with current theme
+    const currentTheme = getTerminalTheme(state.terminalTheme);
     const terminal = new Terminal({
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -150,31 +153,7 @@ export async function createTerminal() {
       allowTransparency: true,
       scrollback: 300,  // Reduced from 5000 for better performance
       convertEol: true,
-      theme: {
-        // Claude CLI-like dark theme
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#58a6ff',
-        cursorAccent: '#0d1117',
-        selectionBackground: 'rgba(56, 139, 253, 0.4)',
-        selectionForeground: '#e6edf3',
-        black: '#0d1117',
-        red: '#ff7b72',
-        green: '#7ee787',
-        yellow: '#d29922',
-        blue: '#58a6ff',
-        magenta: '#bc8cff',
-        cyan: '#76e3ea',
-        white: '#e6edf3',
-        brightBlack: '#6e7681',
-        brightRed: '#ffa198',
-        brightGreen: '#aff5b4',
-        brightYellow: '#e3b341',
-        brightBlue: '#79c0ff',
-        brightMagenta: '#d2a8ff',
-        brightCyan: '#a5d6ff',
-        brightWhite: '#ffffff'
-      }
+      theme: currentTheme.theme
     });
 
     const fitAddon = new FitAddon();
@@ -229,7 +208,8 @@ export function createTerminalFromInfo(info, projectId) {
 
   logger.info('Creating terminal UI from external source', { id: info.id, name: info.name });
 
-  // Create xterm instance
+  // Create xterm instance with current theme
+  const currentTheme = getTerminalTheme(state.terminalTheme);
   const terminal = new Terminal({
     cursorBlink: true,
     cursorStyle: 'bar',
@@ -241,30 +221,7 @@ export function createTerminalFromInfo(info, projectId) {
     allowTransparency: true,
     scrollback: 300,  // Reduced from 5000 for better performance
     convertEol: true,
-    theme: {
-      background: '#0d1117',
-      foreground: '#e6edf3',
-      cursor: '#58a6ff',
-      cursorAccent: '#0d1117',
-      selectionBackground: 'rgba(56, 139, 253, 0.4)',
-      selectionForeground: '#e6edf3',
-      black: '#0d1117',
-      red: '#ff7b72',
-      green: '#7ee787',
-      yellow: '#d29922',
-      blue: '#58a6ff',
-      magenta: '#bc8cff',
-      cyan: '#76e3ea',
-      white: '#e6edf3',
-      brightBlack: '#6e7681',
-      brightRed: '#ffa198',
-      brightGreen: '#aff5b4',
-      brightYellow: '#e3b341',
-      brightBlue: '#79c0ff',
-      brightMagenta: '#d2a8ff',
-      brightCyan: '#a5d6ff',
-      brightWhite: '#ffffff'
-    }
+    theme: currentTheme.theme
   });
 
   const fitAddon = new FitAddon();
@@ -325,12 +282,26 @@ export function renderTerminalTabs() {
   });
   html += '</div>';
 
-  // Font size controls
+  // Theme selector and font size controls
+  const currentTheme = getTerminalTheme(state.terminalTheme);
   html += `
-    <div class="terminal-font-controls">
-      <button class="font-size-btn" id="fontSizeDown" title="Decrease font size">−</button>
-      <span class="font-size-value">${state.terminalFontSize}</span>
-      <button class="font-size-btn" id="fontSizeUp" title="Increase font size">+</button>
+    <div class="terminal-controls">
+      <div class="terminal-theme-selector">
+        <button class="theme-dot" id="themeToggle" title="Change theme: ${currentTheme.displayName}" style="background-color: ${currentTheme.color}"></button>
+        <div class="theme-menu" id="themeMenu">
+          ${Object.values(terminalThemes).map(t => `
+            <button class="theme-option ${t.name === state.terminalTheme ? 'active' : ''}" data-theme="${t.name}" title="${t.displayName}">
+              <span class="theme-color" style="background-color: ${t.color}"></span>
+              <span class="theme-name">${t.displayName}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="terminal-font-controls">
+        <button class="font-size-btn" id="fontSizeDown" title="Decrease font size">−</button>
+        <span class="font-size-value">${state.terminalFontSize}</span>
+        <button class="font-size-btn" id="fontSizeUp" title="Increase font size">+</button>
+      </div>
     </div>
   `;
 
@@ -360,6 +331,31 @@ export function renderTerminalTabs() {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await closeTerminal(btn.dataset.id);
+    });
+  });
+
+  // Theme selector
+  const themeToggle = container.querySelector('#themeToggle');
+  const themeMenu = container.querySelector('#themeMenu');
+
+  themeToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    themeMenu.classList.toggle('visible');
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!themeMenu?.contains(e.target) && e.target !== themeToggle) {
+      themeMenu?.classList.remove('visible');
+    }
+  }, { once: true });
+
+  container.querySelectorAll('.theme-option').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const themeName = btn.dataset.theme;
+      await changeTerminalTheme(themeName);
+      themeMenu?.classList.remove('visible');
     });
   });
 
@@ -578,6 +574,51 @@ function changeTerminalFontSize(delta) {
   if (fontSizeValue) fontSizeValue.textContent = newSize;
 }
 
+// Change theme for all terminals across all projects
+async function changeTerminalTheme(themeName) {
+  if (themeName === state.terminalTheme) return;
+
+  state.terminalTheme = themeName;
+  const theme = getTerminalTheme(themeName);
+
+  // Apply to all terminals across all projects
+  state.projectTerminals.forEach((terminals) => {
+    terminals.forEach((termData) => {
+      termData.terminal.options.theme = theme.theme;
+    });
+  });
+
+  // Save to backend
+  await SetTerminalTheme(themeName);
+
+  // Update UI
+  renderTerminalTabs();
+
+  logger.info('Terminal theme changed', { theme: themeName });
+}
+
+// Apply theme from external source (e.g., on load or from event)
+export function applyTerminalTheme(themeName) {
+  if (!themeName) return;
+
+  state.terminalTheme = themeName;
+  const theme = getTerminalTheme(themeName);
+
+  // Apply to all existing terminals across all projects
+  state.projectTerminals.forEach((terminals) => {
+    terminals.forEach((termData) => {
+      termData.terminal.options.theme = theme.theme;
+    });
+  });
+
+  // Update UI if tabs are rendered
+  const themeToggle = document.querySelector('#themeToggle');
+  if (themeToggle) {
+    themeToggle.style.backgroundColor = theme.color;
+    themeToggle.title = `Change theme: ${theme.displayName}`;
+  }
+}
+
 export async function closeTerminal(id) {
   await CloseTerminal(id);
 
@@ -589,9 +630,6 @@ export async function closeTerminal(id) {
     }
     termData.terminal.dispose();
   }
-
-  // Clean up history buffer
-  removeHistoryBuffer(id);
 
   const wrapper = document.getElementById(`term-wrapper-${id}`);
   if (wrapper) {

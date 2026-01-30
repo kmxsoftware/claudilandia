@@ -54,6 +54,7 @@ export const state = {
   claudeStatus: new Map(), // terminalId -> status
   testStatus: new Map(), // terminalId -> { runner, status, passed, failed, skipped, total, duration, coveragePercent, failedTests }
   terminalFontSize: 14, // Terminal font size
+  terminalTheme: 'claude', // Terminal color theme
   diffSelection: {
     active: false,
     pane: null,       // 'old' | 'new'

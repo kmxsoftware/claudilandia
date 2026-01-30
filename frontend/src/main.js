@@ -14,7 +14,8 @@ import {
   switchTerminal,
   closeTerminal,
   setTerminalCallbacks,
-  initTerminalHandler
+  initTerminalHandler,
+  applyTerminalTheme
 } from './modules/terminal.js';
 import {
   refreshContainers,
@@ -84,12 +85,6 @@ import {
   setupNotesModal,
   initNotesHandler
 } from './modules/notes.js';
-
-// Terminal history buffer for lazy loading
-import {
-  getHistoryBuffer,
-  removeHistoryBuffer
-} from './modules/terminal-history.js';
 
 // Screenshots module
 import {
@@ -170,14 +165,9 @@ function findSequence(haystack, needle) {
  * This may cause minor visual flickering but eliminates freezes.
  *
  * @param {Uint8Array} bytes - Terminal output bytes
- * @param {string} terminalId - Terminal ID for history buffer
  * @returns {Uint8Array} Processed bytes (sync markers removed)
  */
-function processTerminalOutput(bytes, terminalId) {
-  // Save to history buffer
-  const historyBuffer = getHistoryBuffer(terminalId);
-  historyBuffer.appendBytes(bytes);
-
+function processTerminalOutput(bytes) {
   // Remove sync block markers to prevent xterm.js from buffering
   // This allows incremental rendering instead of atomic updates
   let result = bytes;
@@ -236,7 +226,10 @@ import {
   CheckProjectCoverage,
   GetTodos,
   SaveTodos,
-  GetGitHistory
+  GetGitHistory,
+  PauseTerminal,
+  ResumeTerminal,
+  GetTerminalTheme
 } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 
@@ -348,9 +341,16 @@ async function init() {
   const appState = await GetState();
   state.projects = Object.values(appState.projects || {});
 
+  // Load terminal theme
+  const terminalTheme = await GetTerminalTheme();
+  state.terminalTheme = terminalTheme || 'claude';
+
   // Setup event listeners for terminal output with project context
-  // Batch terminal writes using requestAnimationFrame to reduce flickering
-  const pendingWrites = new Map(); // key -> { chunks: Uint8Array[], termData }
+  // Flow control using HIGH/LOW watermarks to prevent xterm.js buffer overflow
+  // See: https://xtermjs.org/docs/guides/flowcontrol/
+  const flowControlState = new Map(); // terminalId -> { watermark, paused }
+  const HIGH_WATERMARK = 100000;  // 100KB - pause backend
+  const LOW_WATERMARK = 10000;    // 10KB - resume backend
 
   EventsOn('state:terminal:output', (data) => {
     const { projectId, id, data: base64Data } = data;
@@ -368,26 +368,32 @@ async function init() {
     }
 
     // Remove sync block markers to prevent xterm.js buffering freeze
-    // Also saves to history buffer
-    bytes = processTerminalOutput(bytes, id);
+    bytes = processTerminalOutput(bytes);
 
-    // Batch writes per terminal
-    const key = `${projectId}:${id}`;
-    if (!pendingWrites.has(key)) {
-      pendingWrites.set(key, { chunks: [], termData });
-      // Schedule batched write on next animation frame
-      requestAnimationFrame(() => {
-        const pending = pendingWrites.get(key);
-        pendingWrites.delete(key);
-        if (pending && pending.termData.terminal) {
-          // Write all batched chunks at once
-          for (const chunk of pending.chunks) {
-            pending.termData.terminal.write(chunk);
-          }
-        }
-      });
+    // Initialize flow control state for this terminal
+    if (!flowControlState.has(id)) {
+      flowControlState.set(id, { watermark: 0, paused: false });
     }
-    pendingWrites.get(key).chunks.push(bytes);
+    const flow = flowControlState.get(id);
+
+    // Track bytes in flight
+    flow.watermark += bytes.length;
+
+    // Write with callback for backpressure
+    termData.terminal.write(bytes, () => {
+      flow.watermark = Math.max(flow.watermark - bytes.length, 0);
+      // Resume if we've drained below LOW_WATERMARK
+      if (flow.paused && flow.watermark < LOW_WATERMARK) {
+        flow.paused = false;
+        ResumeTerminal(id);
+      }
+    });
+
+    // Pause backend if we're overwhelmed
+    if (!flow.paused && flow.watermark > HIGH_WATERMARK) {
+      flow.paused = true;
+      PauseTerminal(id);
+    }
   });
 
   EventsOn('state:terminal:exit', (data) => {
@@ -403,6 +409,12 @@ async function init() {
         }
       }
     }
+  });
+
+  EventsOn('state:terminal:theme', (themeName) => {
+    // Theme changed externally (e.g., from another window)
+    applyTerminalTheme(themeName);
+    renderTerminalTabs();
   });
 
   EventsOn('state:terminal:created', (data) => {
@@ -423,8 +435,8 @@ async function init() {
       termData.terminal.dispose();
       terminals.delete(terminalId);
 
-      // Clean up history buffer
-      removeHistoryBuffer(terminalId);
+      // Clean up flow control state
+      flowControlState.delete(terminalId);
 
       const wrapper = document.getElementById(`term-wrapper-${terminalId}`);
       if (wrapper) wrapper.remove();

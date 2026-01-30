@@ -28,6 +28,8 @@ type AppState struct {
 	GlobalPromptCategories []PromptCategory `json:"globalPromptCategories"`
 	// Approved remote clients (permanent tokens)
 	ApprovedRemoteClients []ApprovedRemoteClient `json:"approvedRemoteClients"`
+	// Terminal theme (global for all terminals)
+	TerminalTheme string `json:"terminalTheme"`
 }
 
 // ProjectState represents a single project with all its state

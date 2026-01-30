@@ -428,6 +428,35 @@ func (a *App) SetActiveTerminal(projectID, terminalID string) {
 	}
 }
 
+// PauseTerminal pauses PTY output reading for flow control
+func (a *App) PauseTerminal(id string) {
+	if a.terminalManager != nil {
+		a.terminalManager.Pause(id)
+	}
+}
+
+// ResumeTerminal resumes PTY output reading for flow control
+func (a *App) ResumeTerminal(id string) {
+	if a.terminalManager != nil {
+		a.terminalManager.Resume(id)
+	}
+}
+
+// GetTerminalTheme returns the current terminal theme name
+func (a *App) GetTerminalTheme() string {
+	if a.stateManager == nil {
+		return "claude"
+	}
+	return a.stateManager.GetTerminalTheme()
+}
+
+// SetTerminalTheme sets the terminal theme for all terminals
+func (a *App) SetTerminalTheme(themeName string) {
+	if a.stateManager != nil {
+		a.stateManager.SetTerminalTheme(themeName)
+	}
+}
+
 // ============================================
 // Browser Methods
 // ============================================

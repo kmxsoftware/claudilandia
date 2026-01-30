@@ -314,6 +314,10 @@ export function GetTemplateSkills() {
   return window['go']['main']['App']['GetTemplateSkills']();
 }
 
+export function GetTerminalTheme() {
+  return window['go']['main']['App']['GetTerminalTheme']();
+}
+
 export function GetTerminals() {
   return window['go']['main']['App']['GetTerminals']();
 }
@@ -390,6 +394,10 @@ export function Log(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['Log'](arg1, arg2, arg3, arg4);
 }
 
+export function PauseTerminal(arg1) {
+  return window['go']['main']['App']['PauseTerminal'](arg1);
+}
+
 export function ReadFileContent(arg1) {
   return window['go']['main']['App']['ReadFileContent'](arg1);
 }
@@ -442,6 +450,10 @@ export function RestartContainer(arg1) {
   return window['go']['main']['App']['RestartContainer'](arg1);
 }
 
+export function ResumeTerminal(arg1) {
+  return window['go']['main']['App']['ResumeTerminal'](arg1);
+}
+
 export function SaveAgentContent(arg1, arg2) {
   return window['go']['main']['App']['SaveAgentContent'](arg1, arg2);
 }
@@ -488,6 +500,10 @@ export function SetActiveProject(arg1) {
 
 export function SetActiveTerminal(arg1, arg2) {
   return window['go']['main']['App']['SetActiveTerminal'](arg1, arg2);
+}
+
+export function SetTerminalTheme(arg1) {
+  return window['go']['main']['App']['SetTerminalTheme'](arg1);
 }
 
 export function StartContainer(arg1) {

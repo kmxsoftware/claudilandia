@@ -580,6 +580,88 @@ body {
   flex: 1;
 }
 
+/* Terminal controls container */
+.terminal-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Theme selector */
+.terminal-theme-selector {
+  position: relative;
+}
+
+.theme-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+.theme-dot:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.1);
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.theme-menu.visible {
+  display: flex;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: #ccc;
+  font-size: 12px;
+  text-align: left;
+}
+
+.theme-option:hover {
+  background: #2d2d2d;
+}
+
+.theme-option.active {
+  background: #3d3d3d;
+  color: #fff;
+}
+
+.theme-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.theme-name {
+  white-space: nowrap;
+}
+
 .terminal-font-controls {
   display: flex;
   align-items: center;
