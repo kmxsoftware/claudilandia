@@ -1,0 +1,43 @@
+# Build artifacts - ignore bin output but keep config files
+build/bin/
+!build/appicon.png
+!build/appicon.icns
+!build/darwin/
+!build/windows/
+!build/README.md
+projecthub
+*.exe
+
+# Dependencies
+node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Secrets & State (in case copied to repo)
+state.json
+*.secret
+*.key
+*.pem
+credentials.json
+secrets.json
+
+# App data (should be in ~/.claudilandia but just in case)
+.projecthub/
+.claudilandia/
