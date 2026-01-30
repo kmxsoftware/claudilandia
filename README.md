@@ -15,7 +15,6 @@ Built with [Wails](https://wails.io/) (Go + JavaScript).
 - **Remote Access** - Access your terminals remotely via WebSocket with ngrok tunnel support
 - **Claude Tools Panel** - Manage agents, skills, commands, hooks, and MCP servers
 - **Project Notes** - Markdown notes per project
-- **Browser Preview** - Embedded browser with device emulation
 - **Screenshots** - Capture and manage project screenshots
 
 ## Screenshot
