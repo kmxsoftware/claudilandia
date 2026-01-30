@@ -202,7 +202,6 @@ export async function selectProject(id) {
 
     // Enable buttons
     document.getElementById('newTerminalBtn').disabled = false;
-    document.getElementById('openBrowserBtn').disabled = false;
     const createFirstBtn = document.getElementById('createFirstTerminal');
     if (createFirstBtn) createFirstBtn.disabled = false;
   }

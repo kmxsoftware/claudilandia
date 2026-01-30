@@ -526,9 +526,6 @@ function render() {
               <button id="newTerminalBtn" class="action-btn" disabled>
                 <span class="icon">⌨️</span> New Terminal
               </button>
-              <button id="openBrowserBtn" class="action-btn" disabled>
-                <span class="icon">🌐</span> Browser
-              </button>
               <button id="dockerBtn" class="action-btn ${state.dockerAvailable ? '' : 'disabled'}">
                 <span class="icon">🐳</span> Docker
               </button>
@@ -906,11 +903,6 @@ function setupEventListeners() {
     if (state.dockerAvailable) {
       openDockerTab();
     }
-  });
-
-  // Browser button
-  document.getElementById('openBrowserBtn').addEventListener('click', () => {
-    switchTab('browser');
   });
 
   // Refresh containers
