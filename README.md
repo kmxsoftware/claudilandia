@@ -22,44 +22,87 @@ Built with [Wails](https://wails.io/) (Go + JavaScript).
 
 *Coming soon*
 
-## Requirements
+## Installation
+
+### macOS
+
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Install Go (via Homebrew)
+brew install go
+
+# Install Node.js (via Homebrew)
+brew install node
+
+# Install Wails CLI
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# Clone and build
+git clone https://github.com/kmxsoftware/claudilandia.git
+cd claudilandia
+cd frontend && npm install && cd ..
+wails build
+
+# Run the app
+open build/bin/Claudilandia.app
+```
+
+### Linux / Ubuntu
+
+```bash
+# Install dependencies
+sudo apt update
+sudo apt install -y golang-go nodejs npm libgtk-3-dev libwebkit2gtk-4.0-dev
+
+# Install Wails CLI
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+export PATH=$PATH:$(go env GOPATH)/bin
+
+# Clone and build
+git clone https://github.com/kmxsoftware/claudilandia.git
+cd claudilandia
+cd frontend && npm install && cd ..
+wails build
+
+# Run the app
+./build/bin/Claudilandia
+```
+
+### Windows / WSL
+
+**Option 1: Native Windows**
+
+```powershell
+# Install Go from https://go.dev/dl/
+# Install Node.js from https://nodejs.org/
+
+# Install Wails CLI
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# Clone and build
+git clone https://github.com/kmxsoftware/claudilandia.git
+cd claudilandia
+cd frontend && npm install && cd ..
+wails build
+
+# Run the app
+.\build\bin\Claudilandia.exe
+```
+
+**Option 2: WSL2 (Ubuntu)**
+
+```bash
+# In WSL2, follow Linux/Ubuntu instructions above
+# Note: GUI requires WSLg (Windows 11) or X server (Windows 10)
+```
+
+### Requirements
 
 - **Go** 1.24+
 - **Node.js** 18+
 - **Wails CLI** v2.11+
-
-### Platform-specific
-
-- **macOS**: Xcode Command Line Tools
-- **Linux**: `gtk3`, `webkit2gtk` (see [Wails Linux Guide](https://wails.io/docs/gettingstarted/installation#linux))
-- **Windows**: WebView2 (usually pre-installed on Windows 10/11)
-
-## Installation
-
-### From Source
-
-1. Install Wails CLI:
-   ```bash
-   go install github.com/wailsapp/wails/v2/cmd/wails@latest
-   ```
-
-2. Clone the repository:
-   ```bash
-   git clone https://github.com/anthropics/claudilandia.git
-   cd claudilandia
-   ```
-
-3. Install frontend dependencies:
-   ```bash
-   cd frontend && npm install && cd ..
-   ```
-
-4. Build the application:
-   ```bash
-   wails build
-   ```
-
-5. Run the built application from `build/bin/`
 
 ## Development
 
