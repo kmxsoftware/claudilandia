@@ -18,9 +18,9 @@ Built with [Wails](https://wails.io/) (Go + JavaScript).
 - **Browser Preview** - Embedded browser with device emulation
 - **Screenshots** - Capture and manage project screenshots
 
-## Screenshots
+## Screenshot
 
-*Coming soon*
+![Claudilandia Screenshot](assets/screenshot.png)
 
 ## Installation
 
