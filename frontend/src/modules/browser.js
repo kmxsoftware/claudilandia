@@ -3,6 +3,7 @@
 import { state } from './state.js';
 import { createModuleLogger } from './logger.js';
 import { normalizeUrl } from './utils.js';
+import { fitWithScrollPreservation } from './terminal-utils.js';
 import { QA_TAB_ID, showQAPanel, updateTestDashboard } from './test-dashboard.js';
 import { DASHBOARD_TAB_ID, showDashboardPanel, renderTodoDashboard } from './todo-dashboard.js';
 import { STRUCTURE_TAB_ID, showStructurePanel, switchToStructureTab } from './structure-panel.jsx';
@@ -301,7 +302,7 @@ export function minimizeBrowserPanel() {
   if (state.activeTerminalId) {
     const termData = window.terminals?.get(state.activeTerminalId);
     if (termData) {
-      setTimeout(() => termData.fitAddon.fit(), 50);
+      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
     }
   }
 }
@@ -327,7 +328,7 @@ export function expandBrowserPanel() {
   if (state.activeTerminalId) {
     const termData = window.terminals?.get(state.activeTerminalId);
     if (termData) {
-      setTimeout(() => termData.fitAddon.fit(), 50);
+      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
     }
   }
 }

@@ -24,10 +24,9 @@ type Terminal struct {
 	mu       sync.Mutex
 	onOutput func(id string, data []byte)
 	onExit   func(id string)
-	// Flow control
-	pauseCh  chan struct{}
-	resumeCh chan struct{}
-	isPaused bool
+	// Flow control with condition variable for true blocking
+	pauseCond *sync.Cond
+	isPaused  bool
 }
 
 // Manager manages multiple terminal sessions
@@ -101,10 +100,9 @@ func (m *Manager) CreateWithID(id, name, workDir string) (*Terminal, error) {
 		running:  true,
 		onOutput: m.onOutput,
 		onExit:   m.onExit,
-		pauseCh:  make(chan struct{}, 1),
-		resumeCh: make(chan struct{}, 1),
 		isPaused: false,
 	}
+	term.pauseCond = sync.NewCond(&term.mu)
 
 	m.terminals[term.ID] = term
 
@@ -206,29 +204,16 @@ func (m *Manager) Resume(id string) {
 // Pause pauses the terminal output reading (flow control)
 func (t *Terminal) Pause() {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.isPaused {
-		t.isPaused = true
-		// Non-blocking send - if channel is full, pause is already pending
-		select {
-		case t.pauseCh <- struct{}{}:
-		default:
-		}
-	}
+	t.isPaused = true
+	t.mu.Unlock()
 }
 
 // Resume resumes the terminal output reading (flow control)
 func (t *Terminal) Resume() {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.isPaused {
-		t.isPaused = false
-		// Non-blocking send - signal resume
-		select {
-		case t.resumeCh <- struct{}{}:
-		default:
-		}
-	}
+	t.isPaused = false
+	t.pauseCond.Signal() // Wake up readOutput goroutine
+	t.mu.Unlock()
 }
 
 // IsPaused returns whether the terminal is currently paused
@@ -241,14 +226,12 @@ func (t *Terminal) IsPaused() bool {
 func (t *Terminal) readOutput() {
 	buf := make([]byte, 4096)
 	for {
-		// Check if paused - wait for resume signal
-		select {
-		case <-t.pauseCh:
-			// We're paused, wait for resume
-			<-t.resumeCh
-		default:
-			// Not paused, continue reading
+		// Block while paused - true blocking with sync.Cond
+		t.mu.Lock()
+		for t.isPaused {
+			t.pauseCond.Wait() // Releases lock, waits for Signal(), reacquires lock
 		}
+		t.mu.Unlock()
 
 		n, err := t.Pty.Read(buf)
 		if err != nil {

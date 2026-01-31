@@ -5,6 +5,7 @@ import { state, getTerminals } from './state.js';
 import { createModuleLogger } from './logger.js';
 import { textToBase64 } from './utils.js';
 import { terminalThemes, getTerminalTheme } from './terminal-themes.js';
+import { fitWithScrollPreservation } from './terminal-utils.js';
 
 const logger = createModuleLogger('Terminal');
 import {
@@ -502,8 +503,14 @@ export function switchTerminal(id) {
       if (state.activeTerminalId === id) {
         if (resizeTimeout) clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
+          const oldCols = terminal.cols;
+          const oldRows = terminal.rows;
           termData.fitAddon.fit();
-        }, 50);
+          // Only scroll to bottom if dimensions actually changed
+          if (terminal.cols !== oldCols || terminal.rows !== oldRows) {
+            terminal.scrollToBottom();
+          }
+        }, 150); // Increased debounce to 150ms
       }
     });
     resizeObserver.observe(termWrapper);
@@ -540,7 +547,7 @@ export function switchTerminal(id) {
 
   // Focus and refit terminal after visibility change
   termData.terminal.focus();
-  setTimeout(() => termData.fitAddon.fit(), 10);
+  setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 10);
 
   renderTerminalTabs();
   renderTerminalList();
@@ -565,7 +572,7 @@ function changeTerminalFontSize(delta) {
   state.projectTerminals.forEach((terminals) => {
     terminals.forEach((termData) => {
       termData.terminal.options.fontSize = newSize;
-      termData.fitAddon.fit();
+      fitWithScrollPreservation(termData.terminal, termData.fitAddon);
     });
   });
 

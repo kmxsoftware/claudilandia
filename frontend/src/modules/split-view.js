@@ -2,6 +2,7 @@
 
 import { state, getTerminals } from './state.js';
 import { registerStateHandler } from './project-switcher.js';
+import { fitWithScrollPreservation } from './terminal-utils.js';
 
 // Callbacks set by main.js
 let splitViewCallbacks = {
@@ -59,7 +60,7 @@ export function initSplitView() {
   if (state.activeTerminalId) {
     const termData = getTerminals().get(state.activeTerminalId);
     if (termData) {
-      setTimeout(() => termData.fitAddon.fit(), 100);
+      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 100);
     }
   }
 }
@@ -128,13 +129,7 @@ export function setupResizer(resizer) {
 
     state.splitRatio = Math.min(80, Math.max(20, startRatio + deltaPercent));
     updateSplitRatio();
-
-    if (state.activeTerminalId) {
-      const termData = getTerminals().get(state.activeTerminalId);
-      if (termData) {
-        termData.fitAddon.fit();
-      }
-    }
+    // Don't fit() during drag - causes terminal to reload/jump
   };
 
   const onMouseUp = () => {
@@ -146,6 +141,7 @@ export function setupResizer(resizer) {
     const overlay = document.getElementById('resizeOverlay');
     if (overlay) overlay.remove();
 
+    // ResizeObserver will handle terminal fit() automatically
     splitViewCallbacks.saveUIState();
   };
 

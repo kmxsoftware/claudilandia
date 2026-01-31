@@ -2,6 +2,7 @@ import { state, getTerminals } from './state.js';
 import { escapeHtml } from './utils.js';
 import { marked } from 'marked';
 import { createModuleLogger } from './logger.js';
+import { fitWithScrollPreservation } from './terminal-utils.js';
 
 const logger = createModuleLogger('ToolsPanel');
 import {
@@ -259,7 +260,7 @@ function minimizeToolsPanel() {
   if (state.activeTerminalId) {
     const termData = getTerminals().get(state.activeTerminalId);
     if (termData) {
-      setTimeout(() => termData.fitAddon.fit(), 50);
+      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
     }
   }
 }
@@ -288,7 +289,7 @@ function expandToolsPanel() {
   if (state.activeTerminalId) {
     const termData = getTerminals().get(state.activeTerminalId);
     if (termData) {
-      setTimeout(() => termData.fitAddon.fit(), 50);
+      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
     }
   }
 }
@@ -326,14 +327,7 @@ function setupToolsPanelResizer() {
 
     toolsState.panelHeight = Math.min(70, Math.max(20, startHeight + deltaPercent));
     updateToolsPanelHeight();
-
-    // Fit terminal during resize
-    if (state.activeTerminalId) {
-      const termData = getTerminals().get(state.activeTerminalId);
-      if (termData) {
-        termData.fitAddon.fit();
-      }
-    }
+    // Don't fit() during drag - causes terminal to reload/jump
   };
 
   const onMouseUp = () => {
@@ -344,6 +338,7 @@ function setupToolsPanelResizer() {
 
     const overlay = document.getElementById('toolsResizeOverlay');
     if (overlay) overlay.remove();
+    // ResizeObserver will handle terminal fit() automatically
   };
 
   resizer.addEventListener('mousedown', onMouseDown);

@@ -17,6 +17,7 @@ import {
   initTerminalHandler,
   applyTerminalTheme
 } from './modules/terminal.js';
+import { fitWithScrollPreservation } from './modules/terminal-utils.js';
 import {
   refreshContainers,
   renderContainers,
@@ -349,8 +350,9 @@ async function init() {
   // Flow control using HIGH/LOW watermarks to prevent xterm.js buffer overflow
   // See: https://xtermjs.org/docs/guides/flowcontrol/
   const flowControlState = new Map(); // terminalId -> { watermark, paused }
-  const HIGH_WATERMARK = 100000;  // 100KB - pause backend
-  const LOW_WATERMARK = 10000;    // 10KB - resume backend
+  // Lower watermarks to account for base64 overhead (33%) and rendering lag
+  const HIGH_WATERMARK = 50000;   // 50KB - pause backend (becomes ~67KB base64)
+  const LOW_WATERMARK = 5000;     // 5KB - resume backend
 
   EventsOn('state:terminal:output', (data) => {
     const { projectId, id, data: base64Data } = data;
@@ -378,15 +380,19 @@ async function init() {
 
     // Track bytes in flight
     flow.watermark += bytes.length;
+    const chunkSize = bytes.length;
 
     // Write with callback for backpressure
+    // Use requestAnimationFrame to wait for actual render, not just queue
     termData.terminal.write(bytes, () => {
-      flow.watermark = Math.max(flow.watermark - bytes.length, 0);
-      // Resume if we've drained below LOW_WATERMARK
-      if (flow.paused && flow.watermark < LOW_WATERMARK) {
-        flow.paused = false;
-        ResumeTerminal(id);
-      }
+      requestAnimationFrame(() => {
+        flow.watermark = Math.max(flow.watermark - chunkSize, 0);
+        // Resume if we've drained below LOW_WATERMARK
+        if (flow.paused && flow.watermark < LOW_WATERMARK) {
+          flow.paused = false;
+          ResumeTerminal(id);
+        }
+      });
     });
 
     // Pause backend if we're overwhelmed
@@ -1134,7 +1140,7 @@ function switchTab(tabName) {
     if (state.activeTerminalId) {
       const termData = getTerminals().get(state.activeTerminalId);
       if (termData) {
-        setTimeout(() => termData.fitAddon.fit(), 50);
+        setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
       }
     }
   }
