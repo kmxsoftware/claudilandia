@@ -48,7 +48,7 @@ export const state = {
     isRepo: false,
     branch: '',
     changedFiles: [],
-    expanded: false,
+    expanded: true,
     currentDiffFile: null
   },
   claudeStatus: new Map(), // terminalId -> status

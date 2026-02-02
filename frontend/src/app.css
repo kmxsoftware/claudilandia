@@ -860,6 +860,65 @@ body {
   contain: content;
 }
 
+/* Terminal Search Bar */
+.terminal-search-bar {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.terminal-search-bar input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  width: 200px;
+  outline: none;
+}
+
+.terminal-search-bar input:focus {
+  border-color: var(--accent);
+}
+
+.terminal-search-results {
+  color: var(--text-muted);
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.terminal-search-bar button {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.terminal-search-bar button:hover {
+  background: var(--bg-hover);
+}
+
+.terminal-search-bar button.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  padding: 2px 6px;
+}
+
 /* Empty State */
 .empty-state {
   display: flex;
@@ -2398,6 +2457,7 @@ body {
   flex-direction: column;
   min-height: 200px;
   overflow: hidden;
+  position: relative; /* For search bar positioning */
 }
 
 /* Tools Panel Resizer */

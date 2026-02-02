@@ -8,6 +8,168 @@ import { terminalThemes, getTerminalTheme } from './terminal-themes.js';
 import { fitWithScrollPreservation } from './terminal-utils.js';
 
 const logger = createModuleLogger('Terminal');
+
+// Preferred renderer (persisted)
+let preferredRenderer = localStorage.getItem('terminalRenderer') || 'webgl';
+
+// Search addon instances per terminal
+const searchAddons = new Map();
+
+/**
+ * Get VS Code-style terminal configuration
+ */
+function getTerminalOptions(theme) {
+  return {
+    // Cursor
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    cursorWidth: 1,
+
+    // Font
+    fontSize: state.terminalFontSize,
+    fontFamily: '"Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", "Menlo", "Monaco", monospace',
+    fontWeight: '400',
+    fontWeightBold: '600',
+    letterSpacing: 0,
+    lineHeight: 1.35,
+
+    // Behavior
+    allowTransparency: true,
+    allowProposedApi: true,
+    scrollback: 5000,
+    convertEol: true,
+
+    // VS Code options
+    drawBoldTextInBrightColors: true,
+    minimumContrastRatio: 4.5,
+    tabStopWidth: 8,
+    wordSeparator: ' ()[]{}\',:;"',
+
+    // macOS specific
+    macOptionIsMeta: false,
+    macOptionClickForcesSelection: true,
+
+    // Scroll
+    fastScrollModifier: 'alt',
+    fastScrollSensitivity: 5,
+    scrollSensitivity: 1,
+    smoothScrollDuration: 125,
+
+    // Rendering
+    rescaleOverlappingGlyphs: true,
+
+    // Theme
+    theme: theme.theme
+  };
+}
+
+/**
+ * Load WebGL addon with intelligent fallback
+ */
+async function loadRenderer(terminal, termData) {
+  if (preferredRenderer === 'webgl') {
+    try {
+      const webglAddon = new WebglAddon({ customGlyphs: true });
+
+      webglAddon.onContextLoss(() => {
+        logger.warn('WebGL context lost, falling back to canvas');
+        webglAddon.dispose();
+        preferredRenderer = 'canvas';
+        localStorage.setItem('terminalRenderer', 'canvas');
+      });
+
+      terminal.loadAddon(webglAddon);
+      termData.webglAddon = webglAddon;
+      logger.debug('WebGL addon loaded successfully');
+    } catch (e) {
+      logger.warn('WebGL not available, using canvas', { error: e.message });
+      preferredRenderer = 'canvas';
+      localStorage.setItem('terminalRenderer', 'canvas');
+    }
+  }
+}
+
+/**
+ * Load Unicode11 addon for better emoji support
+ */
+async function loadUnicodeAddon(terminal) {
+  try {
+    const { Unicode11Addon } = await import('@xterm/addon-unicode11');
+    const unicode11 = new Unicode11Addon();
+    terminal.loadAddon(unicode11);
+    terminal.unicode.activeVersion = '11';
+    logger.debug('Unicode11 addon loaded');
+  } catch (e) {
+    logger.warn('Unicode11 addon failed to load', { error: e.message });
+  }
+}
+
+/**
+ * Initialize search addon for a terminal (lazy loaded)
+ */
+export async function initSearchAddon(terminalId) {
+  const terminals = getTerminals();
+  const termData = terminals.get(terminalId);
+  if (!termData) return null;
+
+  if (searchAddons.has(terminalId)) {
+    return searchAddons.get(terminalId);
+  }
+
+  try {
+    const { SearchAddon } = await import('@xterm/addon-search');
+    const searchAddon = new SearchAddon();
+    termData.terminal.loadAddon(searchAddon);
+    searchAddons.set(terminalId, searchAddon);
+    logger.debug('Search addon loaded', { terminalId });
+    return searchAddon;
+  } catch (e) {
+    logger.warn('Search addon failed to load', { error: e.message });
+    return null;
+  }
+}
+
+/**
+ * Search in terminal
+ */
+export async function searchTerminal(terminalId, query, options = {}) {
+  const searchAddon = await initSearchAddon(terminalId);
+  if (!searchAddon) return null;
+
+  if (!query) {
+    searchAddon.clearDecorations();
+    return { resultIndex: -1, resultCount: 0 };
+  }
+
+  return searchAddon.findNext(query, {
+    regex: options.regex || false,
+    wholeWord: options.wholeWord || false,
+    caseSensitive: options.caseSensitive || false,
+    decorations: {
+      matchBackground: '#FFFF00',
+      matchBorder: '#FFFF00',
+      matchOverviewRuler: '#FFFF00',
+      activeMatchBackground: '#FF6600',
+      activeMatchBorder: '#FF6600',
+      activeMatchColorOverviewRuler: '#FF6600'
+    }
+  });
+}
+
+export function searchTerminalNext(terminalId) {
+  const searchAddon = searchAddons.get(terminalId);
+  if (searchAddon) searchAddon.findNext();
+}
+
+export function searchTerminalPrev(terminalId) {
+  const searchAddon = searchAddons.get(terminalId);
+  if (searchAddon) searchAddon.findPrevious();
+}
+
+export function clearTerminalSearch(terminalId) {
+  const searchAddon = searchAddons.get(terminalId);
+  if (searchAddon) searchAddon.clearDecorations();
+}
 import {
   CreateTerminal as CreateTerminalBackend,
   WriteTerminal,
@@ -141,27 +303,19 @@ export async function createTerminal() {
       return;
     }
 
-    // Create xterm instance with current theme
+    // Create xterm instance with VS Code-style configuration
     const currentTheme = getTerminalTheme(state.terminalTheme);
-    const terminal = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'bar',
-      fontSize: state.terminalFontSize,
-      fontFamily: '"Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", "Menlo", "Monaco", monospace',
-      fontWeight: '400',
-      letterSpacing: 0,
-      lineHeight: 1.35,
-      allowTransparency: true,
-      scrollback: 300,  // Reduced from 5000 for better performance
-      convertEol: true,
-      theme: currentTheme.theme
-    });
+    const terminal = new Terminal(getTerminalOptions(currentTheme));
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
 
-    terminals.set(info.id, { terminal, fitAddon, info });
+    const termData = { terminal, fitAddon, info };
+    terminals.set(info.id, termData);
     state.activeTerminalId = info.id;
+
+    // Load Unicode11 addon for better emoji support
+    loadUnicodeAddon(terminal);
 
     terminal.onData((data) => {
       WriteTerminal(info.id, textToBase64(data));
@@ -209,21 +363,9 @@ export function createTerminalFromInfo(info, projectId) {
 
   logger.info('Creating terminal UI from external source', { id: info.id, name: info.name });
 
-  // Create xterm instance with current theme
+  // Create xterm instance with VS Code-style configuration
   const currentTheme = getTerminalTheme(state.terminalTheme);
-  const terminal = new Terminal({
-    cursorBlink: true,
-    cursorStyle: 'bar',
-    fontSize: state.terminalFontSize,
-    fontFamily: '"Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", "Menlo", "Monaco", monospace',
-    fontWeight: '400',
-    letterSpacing: 0,
-    lineHeight: 1.35,
-    allowTransparency: true,
-    scrollback: 300,  // Reduced from 5000 for better performance
-    convertEol: true,
-    theme: currentTheme.theme
-  });
+  const terminal = new Terminal(getTerminalOptions(currentTheme));
 
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
@@ -236,7 +378,11 @@ export function createTerminalFromInfo(info, projectId) {
     running: info.running !== false
   };
 
-  terminals.set(info.id, { terminal, fitAddon, info: terminalInfo });
+  const termData = { terminal, fitAddon, info: terminalInfo };
+  terminals.set(info.id, termData);
+
+  // Load Unicode11 addon for better emoji support
+  loadUnicodeAddon(terminal);
 
   terminal.onData((data) => {
     WriteTerminal(info.id, textToBase64(data));
@@ -485,17 +631,8 @@ export function switchTerminal(id) {
 
     termData.terminal.open(termWrapper);
 
-    // Load WebGL addon for GPU-accelerated rendering
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-      termData.terminal.loadAddon(webglAddon);
-      logger.debug('WebGL addon loaded successfully');
-    } catch (e) {
-      logger.warn('WebGL addon failed, using canvas renderer', { error: e.message });
-    }
+    // Load WebGL addon with intelligent fallback
+    loadRenderer(termData.terminal, termData);
 
     // Debounced resize handler to prevent flickering
     let resizeTimeout = null;
@@ -503,14 +640,9 @@ export function switchTerminal(id) {
       if (state.activeTerminalId === id) {
         if (resizeTimeout) clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
-          const oldCols = terminal.cols;
-          const oldRows = terminal.rows;
-          termData.fitAddon.fit();
-          // Only scroll to bottom if dimensions actually changed
-          if (terminal.cols !== oldCols || terminal.rows !== oldRows) {
-            terminal.scrollToBottom();
-          }
-        }, 150); // Increased debounce to 150ms
+          // Use fitWithScrollPreservation to maintain scroll position
+          fitWithScrollPreservation(termData.terminal, termData.fitAddon);
+        }, 150);
       }
     });
     resizeObserver.observe(termWrapper);

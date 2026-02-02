@@ -15,7 +15,12 @@ import {
   closeTerminal,
   setTerminalCallbacks,
   initTerminalHandler,
-  applyTerminalTheme
+  applyTerminalTheme,
+  initSearchAddon,
+  searchTerminal,
+  searchTerminalNext,
+  searchTerminalPrev,
+  clearTerminalSearch
 } from './modules/terminal.js';
 import { fitWithScrollPreservation } from './modules/terminal-utils.js';
 import {
@@ -564,12 +569,12 @@ function render() {
           <div class="sidebar-section git-section">
             <div class="git-section-resizer" id="gitSectionResizer"></div>
             <div class="git-header" id="gitHeader">
-              <span class="git-toggle">▶</span>
+              <span class="git-toggle">▼</span>
               <h3>Git</h3>
               <div class="git-stats" id="gitStats"></div>
               <button id="refreshGit" class="small-btn git-refresh" title="Refresh">🔄</button>
             </div>
-            <div id="gitContent" class="git-content collapsed">
+            <div id="gitContent" class="git-content">
               <div class="git-branch-bar" id="gitBranchBar"></div>
               <div id="gitFileList" class="git-file-list"></div>
             </div>
@@ -606,6 +611,14 @@ function render() {
                       <p>No terminal open</p>
                       <button id="createFirstTerminal" class="primary-btn" disabled>Create Terminal</button>
                     </div>
+                  </div>
+                  <!-- Terminal Search Bar (VS Code style) -->
+                  <div id="terminalSearchBar" class="terminal-search-bar" style="display: none;">
+                    <input type="text" id="terminalSearchInput" placeholder="Search..." />
+                    <span id="terminalSearchResults" class="terminal-search-results">0/0</span>
+                    <button id="terminalSearchPrev" title="Previous (Shift+Enter)">↑</button>
+                    <button id="terminalSearchNext" title="Next (Enter)">↓</button>
+                    <button id="terminalSearchClose" class="close-btn" title="Close (Escape)">×</button>
                   </div>
                 </div>
                 <div id="toolsPanelResizer" class="tools-panel-resizer">
@@ -1159,5 +1172,101 @@ function switchTab(tabName) {
   saveUIState();
 }
 
+// Terminal Search Bar (Cmd+F / Ctrl+F)
+function setupTerminalSearch() {
+  const searchBar = document.getElementById('terminalSearchBar');
+  const searchInput = document.getElementById('terminalSearchInput');
+  const searchResults = document.getElementById('terminalSearchResults');
+  const searchPrev = document.getElementById('terminalSearchPrev');
+  const searchNext = document.getElementById('terminalSearchNext');
+  const searchClose = document.getElementById('terminalSearchClose');
+
+  if (!searchBar || !searchInput) return;
+
+  let currentResults = { resultIndex: -1, resultCount: 0 };
+
+  function updateResults(results) {
+    if (results) {
+      currentResults = results;
+      if (results.resultCount > 0) {
+        searchResults.textContent = `${results.resultIndex + 1}/${results.resultCount}`;
+      } else {
+        searchResults.textContent = 'No results';
+      }
+    }
+  }
+
+  function showSearchBar() {
+    searchBar.style.display = 'flex';
+    searchInput.focus();
+    searchInput.select();
+  }
+
+  function hideSearchBar() {
+    searchBar.style.display = 'none';
+    searchInput.value = '';
+    searchResults.textContent = '0/0';
+    if (state.activeTerminalId) {
+      clearTerminalSearch(state.activeTerminalId);
+      const termData = getTerminals().get(state.activeTerminalId);
+      if (termData) termData.terminal.focus();
+    }
+  }
+
+  // Keyboard shortcut: Cmd+F / Ctrl+F
+  document.addEventListener('keydown', async (e) => {
+    // Cmd+F or Ctrl+F to open search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      if (state.activeTab === 'terminal' || state.activeTab === 'default') {
+        if (state.activeTerminalId) {
+          e.preventDefault();
+          showSearchBar();
+        }
+      }
+    }
+
+    // Escape to close search
+    if (e.key === 'Escape' && searchBar.style.display !== 'none') {
+      hideSearchBar();
+    }
+  });
+
+  // Search input handler
+  let searchTimeout = null;
+  searchInput.addEventListener('input', async () => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+      if (state.activeTerminalId) {
+        const results = await searchTerminal(state.activeTerminalId, searchInput.value);
+        updateResults(results);
+      }
+    }, 150);
+  });
+
+  // Enter to find next, Shift+Enter to find previous
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        searchTerminalPrev(state.activeTerminalId);
+      } else {
+        searchTerminalNext(state.activeTerminalId);
+      }
+    }
+  });
+
+  // Button handlers
+  searchPrev.addEventListener('click', () => {
+    searchTerminalPrev(state.activeTerminalId);
+  });
+
+  searchNext.addEventListener('click', () => {
+    searchTerminalNext(state.activeTerminalId);
+  });
+
+  searchClose.addEventListener('click', hideSearchBar);
+}
+
 // Start the app
 init();
+setupTerminalSearch();
