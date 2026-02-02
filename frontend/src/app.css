@@ -49,16 +49,33 @@ body {
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border);
   padding: 0 8px;
-  padding-left: 80px; /* Space for macOS traffic lights */
+  padding-left: 0;
   height: 42px;
+}
+
+/* Drag regions for window movement */
+.drag-region {
+  --wails-draggable: drag;
   -webkit-app-region: drag;
+  height: 100%;
+  min-width: 80px; /* Space for macOS traffic lights */
+  flex-shrink: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.drag-region-right {
+  flex: 1;
+  min-width: 20px;
 }
 
 .project-tabs {
   display: flex;
   gap: 4px;
-  flex: 1;
   overflow-x: auto;
+  max-width: calc(100% - 200px);
+  --wails-draggable: no-drag;
   -webkit-app-region: no-drag;
 }
 
@@ -126,6 +143,7 @@ body {
 }
 
 .add-project-btn {
+  --wails-draggable: no-drag;
   -webkit-app-region: no-drag;
   width: 32px;
   height: 32px;

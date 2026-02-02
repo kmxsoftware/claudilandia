@@ -232,7 +232,7 @@ import {
   ResumeTerminal,
   GetTerminalTheme
 } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { EventsOn, WindowToggleMaximise } from '../wailsjs/runtime/runtime';
 
 // Module callbacks will be set up in init()
 
@@ -523,7 +523,9 @@ function render() {
     <div class="app-container">
       <!-- Project Tabs Bar -->
       <div class="project-tabs-bar">
+        <div class="drag-region"></div>
         <div class="project-tabs" id="projectTabs"></div>
+        <div class="drag-region drag-region-right"></div>
         <button class="add-project-btn" id="addProjectBtn" title="Add Project">+</button>
       </div>
 
@@ -858,6 +860,15 @@ function render() {
 }
 
 function setupEventListeners() {
+  // Double-click on titlebar to toggle maximize/restore
+  document.querySelector('.project-tabs-bar').addEventListener('dblclick', (e) => {
+    // Only toggle if clicking on the titlebar itself or empty space, not on interactive elements
+    const isInteractive = e.target.closest('.project-tab, .add-project-btn, button');
+    if (!isInteractive) {
+      WindowToggleMaximise();
+    }
+  });
+
   // Add project button
   document.getElementById('addProjectBtn').addEventListener('click', () => {
     document.getElementById('addProjectModal').classList.remove('hidden');
