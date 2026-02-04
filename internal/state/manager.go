@@ -1202,3 +1202,18 @@ func (m *Manager) SetTerminalTheme(themeName string) {
 		runtime.EventsEmit(m.ctx, "state:terminal:theme", themeName)
 	}
 }
+
+// GetWindowState returns the saved window state
+func (m *Manager) GetWindowState() *WindowState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.Window
+}
+
+// SetWindowState saves the window state
+func (m *Manager) SetWindowState(state *WindowState) {
+	m.mu.Lock()
+	m.state.Window = state
+	m.mu.Unlock()
+	m.Save()
+}

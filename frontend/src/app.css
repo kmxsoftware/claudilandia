@@ -184,6 +184,74 @@ body {
   flex-shrink: 0;
 }
 
+/* Right Sidebar */
+.sidebar.right-sidebar {
+  width: 280px;
+  min-width: 200px;
+  max-width: 500px;
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+.right-sidebar .notes-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.right-sidebar .notes-section .notes-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.right-sidebar .notes-section .notes-toggle {
+  display: none;
+}
+
+.right-sidebar .notes-section .notes-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  max-height: none !important;
+  margin: 0;
+}
+
+.right-sidebar .notes-section .notes-content.collapsed {
+  max-height: none !important;
+  display: flex;
+}
+
+.right-sidebar .notes-section .notes-preview {
+  flex: 1;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow: auto;
+  cursor: pointer;
+  line-height: 1.5;
+  text-indent: 0;
+}
+
+.right-sidebar .notes-section .notes-preview:hover {
+  background: var(--bg-hover);
+}
+
+.right-sidebar .notes-section .notes-preview.empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.right-sidebar .notes-section .notes-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
 /* Sidebar Resizer */
 .sidebar-resizer {
   width: 4px;
@@ -553,33 +621,7 @@ body {
   display: flex;
 }
 
-/* Split resizer */
-.split-resizer {
-  width: 6px;
-  background: var(--bg-tertiary);
-  cursor: col-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-
-.split-resizer:hover {
-  background: var(--accent);
-}
-
-.resizer-handle {
-  width: 4px;
-  height: 40px;
-  background: var(--border);
-  border-radius: 2px;
-  transition: background 0.15s;
-}
-
-.split-resizer:hover .resizer-handle {
-  background: var(--bg-tertiary);
-}
+/* NOTE: Split resizer CSS removed - split view is deprecated */
 
 /* Terminal Panel */
 .terminal-tabs-bar {
@@ -4326,22 +4368,7 @@ body {
   white-space: nowrap;
 }
 
-.browser-minimize-btn {
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-left: 8px;
-}
-
-.browser-minimize-btn:hover {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
+/* NOTE: browser-minimize-btn CSS removed - button no longer exists */
 
 /* ============================================
    Browser Multi-Tab Styles
@@ -4473,7 +4500,7 @@ body {
 
 /* Dashboard Panel - Todo List */
 .dashboard-panel {
-  display: none;
+  display: flex;
   flex-direction: column;
   flex: 1;
   background: var(--bg-primary);
@@ -5679,4 +5706,427 @@ body {
   to {
     opacity: 0;
   }
+}
+
+/* ============================================
+   iTerm2 Integration Panel
+   ============================================ */
+
+.iterm-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  background: var(--bg-secondary);
+  gap: 16px;
+}
+
+.iterm-panel.not-connected {
+  color: var(--text-muted);
+}
+
+.iterm-panel.no-tabs {
+  color: var(--text-secondary);
+}
+
+.iterm-panel.connected {
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 24px;
+}
+
+.iterm-icon {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.iterm-icon.connected {
+  color: var(--success);
+  opacity: 0.8;
+}
+
+.iterm-message {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.iterm-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: monospace;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iterm-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(166, 227, 161, 0.15);
+  color: var(--success);
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.iterm-status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.iterm-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.iterm-btn.primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.iterm-btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+.iterm-btn.secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.iterm-btn.secondary:hover {
+  background: var(--border);
+}
+
+/* Connected state styles */
+.iterm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.iterm-header h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.iterm-add-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.iterm-add-btn:hover {
+  background: var(--accent-hover);
+}
+
+.iterm-status-indicator {
+  width: 8px;
+  height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.iterm-active-tab {
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.iterm-tab-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.iterm-tab-name-large {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.iterm-tab-path {
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.iterm-tabs-list {
+  margin-bottom: 16px;
+}
+
+.iterm-tabs-header {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.iterm-refresh-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.iterm-refresh-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.iterm-tab-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.iterm-tab-item:hover {
+  background: var(--bg-surface);
+}
+
+.iterm-tab-item.active {
+  background: var(--bg-surface);
+  border-left: 3px solid var(--accent);
+}
+
+.iterm-tab-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.iterm-tab-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-radius: 100px;
+  font-weight: 500;
+}
+
+.iterm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.iterm-actions .iterm-btn {
+  flex: 1;
+}
+
+/* Sidebar variant - compact styles for dashboard */
+.sidebar-iterm {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sidebar-iterm .iterm-panel {
+  padding: 16px;
+  height: auto;
+  gap: 12px;
+}
+
+.sidebar-iterm .iterm-panel.not-connected,
+.sidebar-iterm .iterm-panel.no-tabs {
+  padding: 20px;
+  min-height: 100px;
+}
+
+.sidebar-iterm .iterm-panel.connected {
+  padding: 16px;
+}
+
+.sidebar-iterm .iterm-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.sidebar-iterm .iterm-message {
+  font-size: 14px;
+}
+
+.sidebar-iterm .iterm-hint {
+  font-size: 12px;
+}
+
+.sidebar-iterm .iterm-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.sidebar-iterm .iterm-header {
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.sidebar-iterm .iterm-active-tab {
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.sidebar-iterm .iterm-tab-label {
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.sidebar-iterm .iterm-tab-name-large {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.sidebar-iterm .iterm-tabs-list {
+  margin-bottom: 12px;
+}
+
+.sidebar-iterm .iterm-tabs-header {
+  font-size: 11px;
+}
+
+.sidebar-iterm .iterm-tab-item {
+  padding: 8px 10px;
+}
+
+.sidebar-iterm .iterm-tab-name {
+  font-size: 13px;
+}
+
+.sidebar-iterm .iterm-actions {
+  gap: 6px;
+}
+
+/* Central content area - main panel layout */
+.central-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.central-content-area .browser-tabs-bar {
+  flex-shrink: 0;
+}
+
+/* Sidebar iTerm panel - tab buttons */
+.iterm-panel-sidebar {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.iterm-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.iterm-tab-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.iterm-tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.iterm-tab-btn.active {
+  background: var(--success-hover, #16a34a);
+  color: white;
+}
+
+.iterm-tab-btn.active:hover {
+  background: var(--success);
+}
+
+.iterm-tab-btn.add {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  min-width: 28px;
+}
+
+.iterm-tab-btn.add:hover {
+  background: var(--accent-hover);
+}
+
+.iterm-tab-btn.launch {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+.iterm-tab-btn.launch:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* Full-width main panel layout */
+#browserPanel {
+  width: 100%;
+  flex: 1;
 }

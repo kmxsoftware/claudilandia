@@ -14,6 +14,7 @@ import (
 	"projecthub/internal/claude"
 	"projecthub/internal/docker"
 	"projecthub/internal/git"
+	"projecthub/internal/iterm"
 	"projecthub/internal/logging"
 	"projecthub/internal/remote"
 	"projecthub/internal/state"
@@ -39,6 +40,7 @@ type App struct {
 	structureScanner *structure.Scanner
 	remoteServer     *remote.Server
 	ngrokTunnel      *remote.NgrokTunnel
+	itermController  *iterm.Controller
 	coverageStopChan chan struct{}
 	mu               sync.RWMutex
 }
@@ -111,16 +113,38 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize test scanner
 	a.testScanner = testing.NewTestScanner()
 
+	// Initialize iTerm2 controller
+	a.itermController = iterm.NewController()
+	a.itermController.SetStatusChangeHandler(func(status *iterm.ITermStatus) {
+		runtime.EventsEmit(a.ctx, "iterm-status-changed", status)
+	})
+	a.itermController.StartPolling(2 * time.Second)
+	logging.Info("iTerm2 controller initialized")
+
 	// Start coverage polling in background (check every 5 seconds)
 	a.coverageStopChan = make(chan struct{})
 	go a.coverageWatcher.StartPolling(5*time.Second, a.coverageStopChan)
+
+	// Restore window state after a short delay (needs window to be ready)
+	const windowReadyDelay = 150 * time.Millisecond
+	go func() {
+		time.Sleep(windowReadyDelay)
+		a.restoreWindowState()
+	}()
 }
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Save window state before closing
+	a.saveWindowState()
+
 	// Stop coverage watcher
 	if a.coverageStopChan != nil {
 		close(a.coverageStopChan)
+	}
+	// Stop iTerm2 polling
+	if a.itermController != nil {
+		a.itermController.StopPolling()
 	}
 	if a.terminalManager != nil {
 		a.terminalManager.CloseAll()
@@ -131,6 +155,95 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.stateManager != nil {
 		a.stateManager.SaveSync()
 	}
+}
+
+// Window position bounds for validation (supports multi-monitor setups)
+const (
+	minWindowX      = -5000 // Allow negative for left-side monitors
+	maxWindowX      = 10000
+	minWindowY      = -5000
+	maxWindowY      = 10000
+	minWindowWidth  = 400
+	minWindowHeight = 300
+)
+
+// restoreWindowState restores the window position and size from saved state
+func (a *App) restoreWindowState() {
+	if a.stateManager == nil {
+		return
+	}
+
+	ws := a.stateManager.GetWindowState()
+	if ws == nil {
+		logging.Debug("No window state to restore")
+		return
+	}
+
+	// Restore maximized state first if set
+	if ws.Maximized {
+		runtime.WindowMaximise(a.ctx)
+		logging.Info("Window state restored (maximized)")
+		return
+	}
+
+	// Validate position is within reasonable bounds (supports multi-monitor)
+	positionValid := ws.X >= minWindowX && ws.X <= maxWindowX &&
+		ws.Y >= minWindowY && ws.Y <= maxWindowY
+
+	// Validate size is reasonable
+	sizeValid := ws.Width >= minWindowWidth && ws.Height >= minWindowHeight
+
+	if positionValid {
+		runtime.WindowSetPosition(a.ctx, ws.X, ws.Y)
+	} else {
+		logging.Warn("Skipping window position restore - out of bounds", "x", ws.X, "y", ws.Y)
+	}
+
+	if sizeValid {
+		runtime.WindowSetSize(a.ctx, ws.Width, ws.Height)
+	} else {
+		logging.Warn("Skipping window size restore - invalid", "width", ws.Width, "height", ws.Height)
+	}
+
+	logging.Info("Window state restored", "x", ws.X, "y", ws.Y, "width", ws.Width, "height", ws.Height)
+}
+
+// saveWindowState saves the current window position and size
+func (a *App) saveWindowState() {
+	if a.stateManager == nil {
+		return
+	}
+
+	maximized := runtime.WindowIsMaximised(a.ctx)
+
+	var x, y, width, height int
+
+	if maximized {
+		// When maximized, try to preserve the previous non-maximized state
+		existing := a.stateManager.GetWindowState()
+		if existing != nil && !existing.Maximized {
+			x, y = existing.X, existing.Y
+			width, height = existing.Width, existing.Height
+		} else {
+			// Use current values as fallback
+			x, y = runtime.WindowGetPosition(a.ctx)
+			width, height = runtime.WindowGetSize(a.ctx)
+		}
+	} else {
+		x, y = runtime.WindowGetPosition(a.ctx)
+		width, height = runtime.WindowGetSize(a.ctx)
+	}
+
+	ws := &state.WindowState{
+		X:         x,
+		Y:         y,
+		Width:     width,
+		Height:    height,
+		Maximized: maximized,
+	}
+
+	a.stateManager.SetWindowState(ws)
+	logging.Info("Window state saved", "x", x, "y", y, "width", width, "height", height, "maximized", maximized)
 }
 
 // Terminal output/exit handlers - emit events to frontend with project context
@@ -455,6 +568,62 @@ func (a *App) SetTerminalTheme(themeName string) {
 	if a.stateManager != nil {
 		a.stateManager.SetTerminalTheme(themeName)
 	}
+}
+
+// ============================================
+// iTerm2 Integration Methods
+// ============================================
+
+// GetITermStatus returns the current iTerm2 status (running state and tabs)
+func (a *App) GetITermStatus() *iterm.ITermStatus {
+	if a.itermController == nil {
+		return &iterm.ITermStatus{Running: false, Tabs: []iterm.ITermTab{}}
+	}
+	status, err := a.itermController.GetStatus()
+	if err != nil {
+		return &iterm.ITermStatus{Running: false, Tabs: []iterm.ITermTab{}}
+	}
+	return status
+}
+
+// LaunchITerm launches iTerm2 application
+func (a *App) LaunchITerm() error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.LaunchITerm()
+}
+
+// SwitchITermTab switches to a specific tab in iTerm2
+func (a *App) SwitchITermTab(windowID, tabIndex int) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.SwitchTab(windowID, tabIndex)
+}
+
+// CreateITermTab creates a new tab in iTerm2 at the specified directory with a name
+func (a *App) CreateITermTab(workingDir, tabName string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.CreateTab(workingDir, tabName)
+}
+
+// CloseITermTab closes a specific tab in iTerm2
+func (a *App) CloseITermTab(windowID, tabIndex int) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.CloseTab(windowID, tabIndex)
+}
+
+// FocusITerm brings iTerm2 to the foreground
+func (a *App) FocusITerm() error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.FocusITerm()
 }
 
 // ============================================

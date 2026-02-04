@@ -5,6 +5,7 @@ import { DeleteProject, UpdateProject, SelectDirectory } from '../../wailsjs/go/
 import { updateAllProjectClaudeStatus } from './claude-status.js';
 import { switchTerminal } from './terminal.js';
 import { switchProject } from './project-switcher.js';
+import { renderITermPanel, focusProjectTab } from './iterm-panel.js';
 
 // Open edit project modal
 export function openEditProjectModal() {
@@ -200,10 +201,10 @@ export async function selectProject(id) {
     renderProjectTabs();
     updateWorkspaceInfo();
 
-    // Enable buttons
-    document.getElementById('newTerminalBtn').disabled = false;
-    const createFirstBtn = document.getElementById('createFirstTerminal');
-    if (createFirstBtn) createFirstBtn.disabled = false;
+    // Update iTerm panel for new project and focus its tab
+    renderITermPanel();
+    focusProjectTab();
+
   }
 }
 

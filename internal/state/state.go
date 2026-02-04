@@ -18,6 +18,15 @@ type ApprovedRemoteClient struct {
 	LastUsed  time.Time `json:"lastUsed"`
 }
 
+// WindowState represents the application window position and size
+type WindowState struct {
+	X         int  `json:"x"`
+	Y         int  `json:"y"`
+	Width     int  `json:"width"`
+	Height    int  `json:"height"`
+	Maximized bool `json:"maximized"`
+}
+
 // AppState represents the entire application state
 type AppState struct {
 	Version       int                      `json:"version"`
@@ -30,6 +39,8 @@ type AppState struct {
 	ApprovedRemoteClients []ApprovedRemoteClient `json:"approvedRemoteClients"`
 	// Terminal theme (global for all terminals)
 	TerminalTheme string `json:"terminalTheme"`
+	// Window state (position, size)
+	Window *WindowState `json:"window"`
 }
 
 // ProjectState represents a single project with all its state

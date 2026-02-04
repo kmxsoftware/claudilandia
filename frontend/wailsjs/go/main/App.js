@@ -38,6 +38,10 @@ export function ClearTestDiscoveryCache(arg1) {
   return window['go']['main']['App']['ClearTestDiscoveryCache'](arg1);
 }
 
+export function CloseITermTab(arg1, arg2) {
+  return window['go']['main']['App']['CloseITermTab'](arg1, arg2);
+}
+
 export function CloseTerminal(arg1) {
   return window['go']['main']['App']['CloseTerminal'](arg1);
 }
@@ -52,6 +56,10 @@ export function CreateGlobalPrompt(arg1) {
 
 export function CreateHookScript(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateHookScript'](arg1, arg2, arg3);
+}
+
+export function CreateITermTab(arg1, arg2) {
+  return window['go']['main']['App']['CreateITermTab'](arg1, arg2);
 }
 
 export function CreateProject(arg1, arg2) {
@@ -96,6 +104,10 @@ export function DeletePromptCategory(arg1, arg2, arg3) {
 
 export function DeleteScreenshot(arg1, arg2) {
   return window['go']['main']['App']['DeleteScreenshot'](arg1, arg2);
+}
+
+export function FocusITerm() {
+  return window['go']['main']['App']['FocusITerm']();
 }
 
 export function GetActiveProject() {
@@ -188,6 +200,10 @@ export function GetGlobalPrompts() {
 
 export function GetHookScriptContent(arg1, arg2) {
   return window['go']['main']['App']['GetHookScriptContent'](arg1, arg2);
+}
+
+export function GetITermStatus() {
+  return window['go']['main']['App']['GetITermStatus']();
 }
 
 export function GetInstalledSkills(arg1) {
@@ -390,6 +406,10 @@ export function IsTestRunning() {
   return window['go']['main']['App']['IsTestRunning']();
 }
 
+export function LaunchITerm() {
+  return window['go']['main']['App']['LaunchITerm']();
+}
+
 export function Log(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['Log'](arg1, arg2, arg3, arg4);
 }
@@ -520,6 +540,10 @@ export function StopContainer(arg1) {
 
 export function StopRemoteAccess() {
   return window['go']['main']['App']['StopRemoteAccess']();
+}
+
+export function SwitchITermTab(arg1, arg2) {
+  return window['go']['main']['App']['SwitchITermTab'](arg1, arg2);
 }
 
 export function TogglePromptPinned(arg1, arg2, arg3) {

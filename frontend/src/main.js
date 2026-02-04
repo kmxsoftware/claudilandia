@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import '@xterm/xterm/css/xterm.css';
+// Note: xterm.css removed - using iTerm2 integration instead
 import 'highlight.js/styles/github-dark.css';
 
 // Module imports
@@ -10,7 +10,6 @@ import {
   createTerminal,
   createTerminalFromInfo,
   renderTerminalTabs,
-  renderTerminalList,
   switchTerminal,
   closeTerminal,
   setTerminalCallbacks,
@@ -139,6 +138,11 @@ import {
   initStructurePanel,
   initStructureHandler
 } from './modules/structure-panel.jsx';
+
+// iTerm2 integration module (managed in sidebar)
+import {
+  initITermPanel
+} from './modules/iterm-panel.js';
 
 // DEC mode 2026 markers (sync blocks) - we strip these to prevent buffering freeze
 const SYNC_START = new Uint8Array([0x1b, 0x5b, 0x3f, 0x32, 0x30, 0x32, 0x36, 0x68]); // \x1b[?2026h
@@ -299,6 +303,7 @@ async function init() {
   initToolsPanelHandler();
   initStructureHandler();
   initRemoteAccess();
+  initITermPanel();
 
   // Setup notes callbacks
   setNotesCallbacks({
@@ -454,7 +459,6 @@ async function init() {
 
       if (state.activeProject?.id === projectId) {
         renderTerminalTabs();
-        renderTerminalList();
       }
     }
   });
@@ -548,9 +552,6 @@ function render() {
           <div class="sidebar-section">
             <h3>Quick Actions</h3>
             <div class="quick-actions">
-              <button id="newTerminalBtn" class="action-btn" disabled>
-                <span class="icon">⌨️</span> New Terminal
-              </button>
               <button id="dockerBtn" class="action-btn ${state.dockerAvailable ? '' : 'disabled'}">
                 <span class="icon">🐳</span> Docker
               </button>
@@ -558,12 +559,11 @@ function render() {
           </div>
 
           <div class="sidebar-section terminals-section">
-            <h3>Terminals</h3>
-            <div id="terminalList" class="terminal-list"></div>
-          </div>
-
-          <div class="sidebar-section notes-section" id="notesSection">
-            <!-- Notes section rendered by notes.js -->
+            <div class="iterm-header">
+              <h3>iTerm2</h3>
+              <button class="iterm-add-btn" onclick="window.itermCreateTab()" title="New Terminal Tab">+</button>
+            </div>
+            <div id="iterm-panel" class="iterm-panel-sidebar"></div>
           </div>
 
           <div class="sidebar-section git-section">
@@ -602,88 +602,52 @@ function render() {
 
           <!-- Tab Content -->
           <div class="panel-content">
-            <div id="terminalPanel" class="tab-panel active">
+            <!-- Browser/Dashboard Panel (main content area) -->
+            <div id="browserPanel" class="tab-panel active">
+              <div class="browser-content">
+                <div class="browser-tabs-bar" id="browserTabsBar">
+                  <!-- Browser tabs rendered by browser.js -->
+                </div>
+
+                <!-- Dashboard Panel - Todo List -->
+                <div class="dashboard-panel" id="dashboardPanel" style="display: flex;">
+                  <!-- Todo content rendered by todo-dashboard.js -->
+                </div>
+
+                <!-- Git History Panel -->
+                <div class="git-history-panel" id="gitHistoryPanel" style="display: none;">
+                  <!-- Content rendered by git-dashboard.js -->
+                </div>
+
+                <!-- QA Panel - Tests -->
+                <div class="qa-panel" id="qaPanel" style="display: none;">
+                  <!-- Content rendered by test-dashboard.js -->
+                </div>
+
+                <!-- Structure Panel -->
+                <div class="structure-panel" id="structurePanel" style="display: none;">
+                  <!-- Content rendered by structure-panel.js -->
+                </div>
+
+                <!-- Remote Access Panel -->
+                <div class="remote-access-panel" id="remoteAccessPanel" style="display: none;">
+                  <!-- Content rendered by remote-access.js -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden terminal panel (kept for compatibility) -->
+            <div id="terminalPanel" class="tab-panel" style="display: none;">
               <div class="terminal-panel-container">
                 <div class="terminal-panel-main">
-                  <div id="terminalTabsBar" class="terminal-tabs-bar"></div>
-                  <div id="terminalContainer" class="terminal-container">
-                    <div class="empty-state">
-                      <p>No terminal open</p>
-                      <button id="createFirstTerminal" class="primary-btn" disabled>Create Terminal</button>
-                    </div>
-                  </div>
-                  <!-- Terminal Search Bar (VS Code style) -->
+                  <div id="terminalTabsBar" class="terminal-tabs-bar" style="display: none;"></div>
+                  <div id="terminalContainer" class="terminal-container" style="display: none;"></div>
                   <div id="terminalSearchBar" class="terminal-search-bar" style="display: none;">
                     <input type="text" id="terminalSearchInput" placeholder="Search..." />
                     <span id="terminalSearchResults" class="terminal-search-results">0/0</span>
                     <button id="terminalSearchPrev" title="Previous (Shift+Enter)">↑</button>
                     <button id="terminalSearchNext" title="Next (Enter)">↓</button>
                     <button id="terminalSearchClose" class="close-btn" title="Close (Escape)">×</button>
-                  </div>
-                </div>
-                <div id="toolsPanelResizer" class="tools-panel-resizer">
-                  <div class="resizer-handle"></div>
-                </div>
-                <div id="projectToolsPanel" class="project-tools-panel">
-                  <div class="project-tools-header">
-                    <div class="tools-tabs">
-                      <button class="tools-tab active" data-tools-tab="prompts">
-                        <span class="tools-tab-icon">💬</span> Prompts
-                      </button>
-                      <button class="tools-tab" data-tools-tab="agents">
-                        <span class="tools-tab-icon">🤖</span> Agents
-                      </button>
-                      <button class="tools-tab" data-tools-tab="commands">
-                        <span class="tools-tab-icon">⌨️</span> Commands
-                      </button>
-                      <button class="tools-tab" data-tools-tab="skills">
-                        <span class="tools-tab-icon">⚡</span> Skills
-                      </button>
-                      <button class="tools-tab" data-tools-tab="hooks">
-                        <span class="tools-tab-icon">🪝</span> Hooks
-                      </button>
-                      <button class="tools-tab" data-tools-tab="mcp">
-                        <span class="tools-tab-icon">🔌</span> MCP
-                      </button>
-                      <button class="tools-tab" data-tools-tab="libs">
-                        <span class="tools-tab-icon">📦</span> Libs
-                      </button>
-                      <button class="tools-tab" data-tools-tab="claudemd">
-                        <span class="tools-tab-icon">📄</span> CLAUDE.MD
-                      </button>
-                    </div>
-                    <button id="collapseToolsPanel" class="tools-collapse-btn" title="Minimize panel">▼</button>
-                  </div>
-                  <div class="tools-status-bar" id="toolsStatusBar">
-                    <span class="status-bar-icon" id="statusBarIcon">💬</span>
-                    <span class="status-bar-label" id="statusBarLabel">Prompts</span>
-                    <button id="expandToolsPanel" class="tools-expand-btn" title="Expand panel">▲</button>
-                  </div>
-                  <div class="tools-panel-content">
-                    <div id="toolsPromptsTab" class="tools-tab-content active">
-                      <div class="prompts-container" id="promptsContainer"></div>
-                    </div>
-                    <div id="toolsAgentsTab" class="tools-tab-content" style="display:none;">
-                      <div class="tools-list" id="agentsList"></div>
-                    </div>
-                    <div id="toolsCommandsTab" class="tools-tab-content" style="display:none;">
-                      <div class="tools-list" id="commandsList"></div>
-                    </div>
-                    <div id="toolsSkillsTab" class="tools-tab-content" style="display:none;">
-                      <div class="tools-list" id="skillsList"></div>
-                    </div>
-                    <div id="toolsHooksTab" class="tools-tab-content" style="display:none;">
-                      <div class="tools-list" id="hooksList"></div>
-                    </div>
-                    <div id="toolsMcpTab" class="tools-tab-content" style="display:none;">
-                      <div class="tools-list" id="mcpList"></div>
-                    </div>
-                    <div id="toolsLibsTab" class="tools-tab-content" style="display:none;">
-                      <div id="libsList"></div>
-                    </div>
-                    <div id="toolsClaudemdTab" class="tools-tab-content" style="display:none;">
-                      <div id="claudemdEditor" class="claudemd-editor-container"></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -706,44 +670,6 @@ function render() {
               </div>
             </div>
 
-            <div id="browserPanel" class="tab-panel">
-              <div class="browser-status-bar" id="browserStatusBar">
-                <button id="expandBrowserPanel" class="browser-expand-btn" title="Expand panel">◀</button>
-                <span class="browser-status-icon" id="browserStatusBarIcon">📊</span>
-                <span class="browser-status-label" id="browserStatusBarLabel">Dashboard</span>
-              </div>
-              <div class="browser-content">
-                <div class="browser-tabs-bar" id="browserTabsBar">
-                  <!-- Browser tabs rendered by browser.js -->
-                </div>
-
-                <!-- Dashboard Panel - Todo List -->
-                <div class="dashboard-panel" id="dashboardPanel" style="display: none;">
-                  <!-- Content rendered by todo-dashboard.js -->
-                </div>
-
-                <!-- Git History Panel -->
-                <div class="git-history-panel" id="gitHistoryPanel" style="display: none;">
-                  <!-- Content rendered by git-dashboard.js -->
-                </div>
-
-                <!-- QA Panel - Tests (previously testsPanel) -->
-                <div class="qa-panel" id="qaPanel" style="display: none;">
-                  <!-- Content rendered by test-dashboard.js -->
-                </div>
-
-                <!-- Structure Panel - visualizes project file structure -->
-                <div class="structure-panel" id="structurePanel" style="display: none;">
-                  <!-- Content rendered by structure-panel.js (React) -->
-                </div>
-
-                <!-- Remote Access Panel - access terminals from iPhone -->
-                <div class="remote-access-panel" id="remoteAccessPanel" style="display: none;">
-                  <!-- Content rendered by remote-access.js -->
-                </div>
-              </div>
-            </div>
-
             <div id="diffPanel" class="tab-panel">
               <div class="diff-panel-content">
                 <div class="diff-toolbar">
@@ -757,6 +683,83 @@ function render() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Tools Panel (Bottom) -->
+          <div id="toolsPanelResizer" class="tools-panel-resizer">
+            <div class="resizer-handle"></div>
+          </div>
+          <div id="projectToolsPanel" class="project-tools-panel">
+            <div class="project-tools-header">
+              <div class="tools-tabs">
+                <button class="tools-tab active" data-tools-tab="prompts">
+                  <span class="tools-tab-icon">💬</span> Prompts
+                </button>
+                <button class="tools-tab" data-tools-tab="agents">
+                  <span class="tools-tab-icon">🤖</span> Agents
+                </button>
+                <button class="tools-tab" data-tools-tab="commands">
+                  <span class="tools-tab-icon">⌨️</span> Commands
+                </button>
+                <button class="tools-tab" data-tools-tab="skills">
+                  <span class="tools-tab-icon">⚡</span> Skills
+                </button>
+                <button class="tools-tab" data-tools-tab="hooks">
+                  <span class="tools-tab-icon">🪝</span> Hooks
+                </button>
+                <button class="tools-tab" data-tools-tab="mcp">
+                  <span class="tools-tab-icon">🔌</span> MCP
+                </button>
+                <button class="tools-tab" data-tools-tab="libs">
+                  <span class="tools-tab-icon">📦</span> Libs
+                </button>
+                <button class="tools-tab" data-tools-tab="claudemd">
+                  <span class="tools-tab-icon">📄</span> CLAUDE.MD
+                </button>
+              </div>
+              <button id="collapseToolsPanel" class="tools-collapse-btn" title="Minimize panel">▼</button>
+            </div>
+            <div class="tools-status-bar" id="toolsStatusBar">
+              <span class="status-bar-icon" id="statusBarIcon">💬</span>
+              <span class="status-bar-label" id="statusBarLabel">Prompts</span>
+              <button id="expandToolsPanel" class="tools-expand-btn" title="Expand panel">▲</button>
+            </div>
+            <div class="tools-panel-content">
+              <div id="toolsPromptsTab" class="tools-tab-content active">
+                <div class="prompts-container" id="promptsContainer"></div>
+              </div>
+              <div id="toolsAgentsTab" class="tools-tab-content" style="display:none;">
+                <div class="tools-list" id="agentsList"></div>
+              </div>
+              <div id="toolsCommandsTab" class="tools-tab-content" style="display:none;">
+                <div class="tools-list" id="commandsList"></div>
+              </div>
+              <div id="toolsSkillsTab" class="tools-tab-content" style="display:none;">
+                <div class="tools-list" id="skillsList"></div>
+              </div>
+              <div id="toolsHooksTab" class="tools-tab-content" style="display:none;">
+                <div class="tools-list" id="hooksList"></div>
+              </div>
+              <div id="toolsMcpTab" class="tools-tab-content" style="display:none;">
+                <div class="tools-list" id="mcpList"></div>
+              </div>
+              <div id="toolsLibsTab" class="tools-tab-content" style="display:none;">
+                <div id="libsList"></div>
+              </div>
+              <div id="toolsClaudemdTab" class="tools-tab-content" style="display:none;">
+                <div id="claudemdEditor" class="claudemd-editor-container"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Sidebar Resizer -->
+        <div class="sidebar-resizer right-sidebar-resizer" id="rightSidebarResizer"></div>
+
+        <!-- Right Sidebar -->
+        <div class="sidebar right-sidebar" id="rightSidebar">
+          <div class="sidebar-section notes-section" id="notesSection">
+            <!-- Notes section rendered by notes.js -->
           </div>
         </div>
       </div>
@@ -866,7 +869,6 @@ function render() {
 
   // Render dynamic parts
   renderProjectTabs();
-  renderTerminalList();
   renderNotesSection();
   renderColorPicker();
   renderIconPicker();
@@ -918,19 +920,6 @@ function setupEventListeners() {
     }
   });
 
-  // New terminal button
-  document.getElementById('newTerminalBtn').addEventListener('click', () => {
-    if (state.activeProject) {
-      createTerminal();
-    }
-  });
-
-  // Create first terminal button
-  document.getElementById('createFirstTerminal').addEventListener('click', () => {
-    if (state.activeProject) {
-      createTerminal();
-    }
-  });
 
   // Panel tabs
   document.querySelectorAll('.panel-tab').forEach(tab => {
@@ -963,8 +952,8 @@ function setupEventListeners() {
     }
   });
 
-  // Initialize split view (always active - terminal + browser side by side)
-  initSplitView();
+  // Split view no longer used - main panel is full width now
+  // initSplitView();
 
   // Close diff tab
   document.getElementById('closeDiffTab')?.addEventListener('click', (e) => {
@@ -978,8 +967,9 @@ function setupEventListeners() {
     closeDockerTab();
   });
 
-  // Sidebar resizer
+  // Sidebar resizers
   setupSidebarResizer();
+  setupRightSidebarResizer();
 
   // Git section resizer
   setupGitSectionResizer();
@@ -1008,6 +998,43 @@ function setupSidebarResizer() {
     if (!isResizing) return;
     const deltaX = e.clientX - startX;
     const newWidth = Math.min(400, Math.max(180, startWidth + deltaX));
+    sidebar.style.width = `${newWidth}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isResizing) {
+      isResizing = false;
+      resizer.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+}
+
+// Setup right sidebar horizontal resizer
+function setupRightSidebarResizer() {
+  const resizer = document.getElementById('rightSidebarResizer');
+  const sidebar = document.getElementById('rightSidebar');
+  if (!resizer || !sidebar) return;
+
+  let isResizing = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  resizer.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    resizer.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    // For right sidebar, dragging left increases width
+    const deltaX = startX - e.clientX;
+    const newWidth = Math.min(500, Math.max(200, startWidth + deltaX));
     sidebar.style.width = `${newWidth}px`;
   });
 
@@ -1116,57 +1143,29 @@ function closeDockerTab() {
 function switchTab(tabName) {
   state.activeTab = tabName;
 
-  const panelContent = document.querySelector('.panel-content');
-  const terminalPanel = document.getElementById('terminalPanel');
   const browserPanel = document.getElementById('browserPanel');
   const dockerPanel = document.getElementById('dockerPanel');
   const diffPanel = document.getElementById('diffPanel');
-  const resizer = document.getElementById('splitResizer');
 
   // Update active state on special tabs (diff, docker)
   document.querySelectorAll('.panel-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.tab === tabName);
   });
 
-  // Handle special tabs (diff, docker) vs split view
-  if (tabName === 'diff' || tabName === 'docker') {
-    // Hide split view, show special panel
-    panelContent.classList.remove('split-view');
-    terminalPanel.classList.remove('active', 'split-left');
-    browserPanel.classList.remove('active', 'split-right');
+  // Handle special tabs (diff, docker) vs main browser panel
+  if (tabName === 'diff') {
+    browserPanel.classList.remove('active');
     dockerPanel.classList.remove('active');
+    diffPanel.classList.add('active');
+  } else if (tabName === 'docker') {
+    browserPanel.classList.remove('active');
     diffPanel.classList.remove('active');
-    if (resizer) resizer.style.display = 'none';
-
-    if (tabName === 'diff') {
-      diffPanel.classList.add('active');
-    } else {
-      dockerPanel.classList.add('active');
-    }
+    dockerPanel.classList.add('active');
   } else {
-    // Restore split view (always active)
-    panelContent.classList.add('split-view');
-    terminalPanel.classList.add('active', 'split-left');
-    browserPanel.classList.add('active', 'split-right');
+    // Show browser panel (full width)
+    browserPanel.classList.add('active');
     dockerPanel.classList.remove('active');
     diffPanel.classList.remove('active');
-
-    // Respect browser minimized state
-    if (state.browser.minimized) {
-      browserPanel.classList.add('minimized');
-      if (resizer) resizer.style.display = 'none';
-    } else {
-      browserPanel.classList.remove('minimized');
-      if (resizer) resizer.style.display = 'flex';
-    }
-    updateSplitRatio();
-
-    if (state.activeTerminalId) {
-      const termData = getTerminals().get(state.activeTerminalId);
-      if (termData) {
-        setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
-      }
-    }
   }
 
   saveUIState();

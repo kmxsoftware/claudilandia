@@ -7,6 +7,7 @@ import {main} from '../models';
 import {testing} from '../models';
 import {docker} from '../models';
 import {git} from '../models';
+import {iterm} from '../models';
 import {structure} from '../models';
 
 export function AddApprovedClient(arg1:string):Promise<remote.ApprovedClient>;
@@ -27,6 +28,8 @@ export function CheckProjectCoverage(arg1:string):Promise<void>;
 
 export function ClearTestDiscoveryCache(arg1:string):Promise<void>;
 
+export function CloseITermTab(arg1:number,arg2:number):Promise<void>;
+
 export function CloseTerminal(arg1:string):Promise<void>;
 
 export function CreateCommand(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -34,6 +37,8 @@ export function CreateCommand(arg1:string,arg2:string,arg3:string):Promise<void>
 export function CreateGlobalPrompt(arg1:state.Prompt):Promise<state.Prompt>;
 
 export function CreateHookScript(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function CreateITermTab(arg1:string,arg2:string):Promise<void>;
 
 export function CreateProject(arg1:string,arg2:string):Promise<state.ProjectState>;
 
@@ -56,6 +61,8 @@ export function DeletePrompt(arg1:string,arg2:string):Promise<void>;
 export function DeletePromptCategory(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function DeleteScreenshot(arg1:string,arg2:string):Promise<void>;
+
+export function FocusITerm():Promise<void>;
 
 export function GetActiveProject():Promise<string>;
 
@@ -102,6 +109,8 @@ export function GetGlobalPromptCategories():Promise<Array<state.PromptCategory>>
 export function GetGlobalPrompts():Promise<Array<state.Prompt>>;
 
 export function GetHookScriptContent(arg1:string,arg2:string):Promise<string>;
+
+export function GetITermStatus():Promise<iterm.ITermStatus>;
 
 export function GetInstalledSkills(arg1:string):Promise<Array<string>>;
 
@@ -203,6 +212,8 @@ export function IsGitRepo(arg1:string):Promise<boolean>;
 
 export function IsTestRunning():Promise<boolean>;
 
+export function LaunchITerm():Promise<void>;
+
 export function Log(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<void>;
 
 export function PauseTerminal(arg1:string):Promise<void>;
@@ -268,6 +279,8 @@ export function StartRemoteAccess(arg1:remote.Config):Promise<main.RemoteAccessS
 export function StopContainer(arg1:string):Promise<void>;
 
 export function StopRemoteAccess():Promise<void>;
+
+export function SwitchITermTab(arg1:number,arg2:number):Promise<void>;
 
 export function TogglePromptPinned(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 

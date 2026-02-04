@@ -30,9 +30,7 @@ export function renderNotesSection() {
       <span class="notes-icon">${hasNotes ? '📝' : '📄'}</span>
     </div>
     <div id="notesContent" class="notes-content ${state.notesExpanded ? '' : 'collapsed'}">
-      <div class="notes-preview ${hasNotes ? '' : 'empty'}" id="notesPreview">
-        ${hasNotes ? escapeHtml(preview) + (notes.length > 50 ? '...' : '') : 'Click to add notes...'}
-      </div>
+      <div class="notes-preview ${hasNotes ? '' : 'empty'}" id="notesPreview">${hasNotes ? escapeHtml(preview) + (notes.length > 50 ? '...' : '') : 'Click to add notes...'}</div>
       <div class="notes-actions">
         <button class="small-btn notes-edit-btn" id="editNotesBtn">Edit</button>
         ${hasNotes ? '<button class="small-btn notes-copy-btn" id="copyNotesBtn">Copy</button>' : ''}

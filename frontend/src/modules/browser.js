@@ -77,7 +77,6 @@ export function renderBrowserTabs() {
         <span class="tab-title">Remote</span>
       </div>
     </div>
-    <button id="minimizeBrowserPanel" class="browser-minimize-btn" title="Minimize panel">▶</button>
   `;
 
   // Setup event listeners
@@ -96,10 +95,6 @@ export function renderBrowserTabs() {
         switchToRemoteTab();
       }
     });
-  });
-
-  document.getElementById('minimizeBrowserPanel')?.addEventListener('click', () => {
-    minimizeBrowserPanel();
   });
 }
 
@@ -278,59 +273,13 @@ function updateBrowserStatusBar() {
   }
 }
 
+// DEPRECATED: Split view removed - these are no-ops for backward compatibility
 export function minimizeBrowserPanel() {
-  const browserPanel = document.getElementById('browserPanel');
-  const terminalPanel = document.getElementById('terminalPanel');
-  const resizer = document.getElementById('splitResizer');
-
-  if (!browserPanel) return;
-
-  state.browser.minimized = true;
-  browserPanel.classList.add('minimized');
-
-  // Terminal takes all width, hide resizer
-  if (terminalPanel) {
-    terminalPanel.style.flex = '1 1 100%';
-  }
-  browserPanel.style.flex = '0 0 36px';
-  if (resizer) resizer.style.display = 'none';
-
-  // Update status bar
-  updateBrowserStatusBar();
-
-  // Fit terminal
-  if (state.activeTerminalId) {
-    const termData = window.terminals?.get(state.activeTerminalId);
-    if (termData) {
-      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
-    }
-  }
+  // No-op: split view is disabled
 }
 
 export function expandBrowserPanel() {
-  const browserPanel = document.getElementById('browserPanel');
-  const terminalPanel = document.getElementById('terminalPanel');
-  const resizer = document.getElementById('splitResizer');
-
-  if (!browserPanel) return;
-
-  state.browser.minimized = false;
-  browserPanel.classList.remove('minimized');
-
-  // Restore split view and show resizer
-  if (resizer) resizer.style.display = 'flex';
-  if (terminalPanel) {
-    terminalPanel.style.flex = `0 0 ${state.splitRatio}%`;
-    browserPanel.style.flex = `0 0 ${100 - state.splitRatio}%`;
-  }
-
-  // Fit terminal
-  if (state.activeTerminalId) {
-    const termData = window.terminals?.get(state.activeTerminalId);
-    if (termData) {
-      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
-    }
-  }
+  // No-op: split view is disabled
 }
 
 // ============================================
