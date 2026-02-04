@@ -64,7 +64,7 @@ import {
   GetGlobalPromptCategories,
   CreatePromptCategory,
   DeletePromptCategory,
-  WriteTerminal
+  WriteITermText
 } from '../../wailsjs/go/main/App';
 import { registerStateHandler } from './project-switcher.js';
 
@@ -516,16 +516,12 @@ async function renderPromptsTab() {
 
 function renderPromptItem(prompt, maxUsage, totalPrompts) {
   const sizeClass = calculatePromptSize(prompt.usageCount, maxUsage, totalPrompts);
-  const isDisabled = !state.activeTerminalId;
-  const claudeStatus = state.claudeStatus.get(state.activeTerminalId);
-  const isWorking = claudeStatus === 'working';
-  const disabledClass = (isDisabled || isWorking) ? 'disabled' : '';
   const pinnedClass = prompt.pinned ? 'pinned' : '';
 
   return `
     <div class="prompt-item-wrapper">
       <button class="prompt-menu-btn" data-prompt-id="${prompt.id}" data-is-global="${prompt.isGlobal}" title="Options">⋮</button>
-      <div class="prompt-item ${sizeClass} ${disabledClass} ${pinnedClass}"
+      <div class="prompt-item ${sizeClass} ${pinnedClass}"
            data-prompt-id="${prompt.id}"
            data-is-global="${prompt.isGlobal}">
         <span class="prompt-item-icon">${prompt.pinned ? '📌' : '💬'}</span>
@@ -561,8 +557,8 @@ function setupPromptEventHandlers(container) {
     btn.addEventListener('click', () => showCreatePromptModal());
   });
 
-  // Prompt item click - send to terminal
-  container.querySelectorAll('.prompt-item:not(.disabled)').forEach(item => {
+  // Prompt item click - send to iTerm2
+  container.querySelectorAll('.prompt-item').forEach(item => {
     item.addEventListener('click', async (e) => {
       const promptId = item.dataset.promptId;
       const isGlobal = item.dataset.isGlobal === 'true';
@@ -592,33 +588,15 @@ function setupPromptEventHandlers(container) {
 }
 
 async function sendPromptToTerminal(promptId, isGlobal) {
-  // Check if there's an active terminal
-  if (!state.activeTerminalId) {
-    alert('No active terminal');
-    return;
-  }
-
-  // Check Claude status
-  const status = state.claudeStatus.get(state.activeTerminalId);
-  if (status === 'working') {
-    alert('Claude is working, please wait...');
-    return;
-  }
-
   // Find the prompt
   const prompts = isGlobal ? toolsState.globalPrompts : toolsState.prompts;
   const prompt = prompts.find(p => p.id === promptId);
   if (!prompt) return;
 
   try {
-    // Send prompt text
-    const textEncoded = btoa(unescape(encodeURIComponent(prompt.content)));
-    await WriteTerminal(state.activeTerminalId, textEncoded);
-
-    // Auto-submit: send Enter (\r) separately
-    if (toolsState.promptAutoSubmit) {
-      await WriteTerminal(state.activeTerminalId, btoa('\r'));
-    }
+    // Send prompt text to iTerm2
+    // The second parameter controls whether to press Enter after the text
+    await WriteITermText(prompt.content, toolsState.promptAutoSubmit);
 
     // Increment usage
     await IncrementPromptUsage(state.activeProject?.id, promptId, isGlobal);
@@ -626,7 +604,7 @@ async function sendPromptToTerminal(promptId, isGlobal) {
     // Refresh the tab
     renderPromptsTab();
   } catch (err) {
-    logger.error('Failed to send prompt', { error: err.message || String(err) });
+    logger.error('Failed to send prompt to iTerm2', { error: err.message || String(err) });
     alert('Failed to send prompt: ' + err);
   }
 }

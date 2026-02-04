@@ -335,6 +335,50 @@ func (c *Controller) FocusITerm() error {
 	return err
 }
 
+// WriteText writes text to the active iTerm2 session
+func (c *Controller) WriteText(text string, pressEnter bool) error {
+	if !c.IsRunning() {
+		return fmt.Errorf("iTerm2 is not running")
+	}
+
+	// Escape special characters for AppleScript
+	escapedText := strings.ReplaceAll(text, "\\", "\\\\")
+	escapedText = strings.ReplaceAll(escapedText, "\"", "\\\"")
+	escapedText = strings.ReplaceAll(escapedText, "\n", "\\n")
+	escapedText = strings.ReplaceAll(escapedText, "\r", "\\r")
+	escapedText = strings.ReplaceAll(escapedText, "\t", "\\t")
+
+	var script string
+	if pressEnter {
+		// Write text and press Enter
+		script = fmt.Sprintf(`
+tell application "iTerm2"
+	tell current session of current window
+		write text "%s"
+	end tell
+end tell
+`, escapedText)
+	} else {
+		// Write text without pressing Enter (using "write text ... without newline")
+		script = fmt.Sprintf(`
+tell application "iTerm2"
+	tell current session of current window
+		write text "%s" without newline
+	end tell
+end tell
+`, escapedText)
+	}
+
+	_, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to write text to iTerm2", "error", err)
+		return err
+	}
+
+	logging.Debug("Wrote text to iTerm2", "length", len(text), "pressEnter", pressEnter)
+	return nil
+}
+
 func (c *Controller) runAppleScript(script string) (string, error) {
 	cmd := exec.Command("osascript", "-e", script)
 	output, err := cmd.Output()

@@ -300,4 +300,6 @@ export function UpdateUIState(arg1:string,arg2:string,arg3:boolean,arg4:number):
 
 export function WatchProjectCoverage(arg1:string):Promise<void>;
 
+export function WriteITermText(arg1:string,arg2:boolean):Promise<void>;
+
 export function WriteTerminal(arg1:string,arg2:string):Promise<void>;

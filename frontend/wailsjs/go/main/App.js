@@ -582,6 +582,10 @@ export function WatchProjectCoverage(arg1) {
   return window['go']['main']['App']['WatchProjectCoverage'](arg1);
 }
 
+export function WriteITermText(arg1, arg2) {
+  return window['go']['main']['App']['WriteITermText'](arg1, arg2);
+}
+
 export function WriteTerminal(arg1, arg2) {
   return window['go']['main']['App']['WriteTerminal'](arg1, arg2);
 }

@@ -626,6 +626,14 @@ func (a *App) FocusITerm() error {
 	return a.itermController.FocusITerm()
 }
 
+// WriteITermText writes text to the active iTerm2 session
+func (a *App) WriteITermText(text string, pressEnter bool) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.WriteText(text, pressEnter)
+}
+
 // ============================================
 // Browser Methods
 // ============================================
