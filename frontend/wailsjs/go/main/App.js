@@ -202,6 +202,14 @@ export function GetHookScriptContent(arg1, arg2) {
   return window['go']['main']['App']['GetHookScriptContent'](arg1, arg2);
 }
 
+export function GetITermSessionContents(arg1) {
+  return window['go']['main']['App']['GetITermSessionContents'](arg1);
+}
+
+export function GetITermSessionInfo() {
+  return window['go']['main']['App']['GetITermSessionInfo']();
+}
+
 export function GetITermStatus() {
   return window['go']['main']['App']['GetITermStatus']();
 }
@@ -456,6 +464,10 @@ export function RemoveHook(arg1, arg2, arg3) {
 
 export function RemoveMCPServer(arg1, arg2) {
   return window['go']['main']['App']['RemoveMCPServer'](arg1, arg2);
+}
+
+export function RenameITermTab(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameITermTab'](arg1, arg2, arg3);
 }
 
 export function ResetTestState(arg1) {

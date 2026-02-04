@@ -602,6 +602,14 @@ func (a *App) SwitchITermTab(windowID, tabIndex int) error {
 	return a.itermController.SwitchTab(windowID, tabIndex)
 }
 
+// RenameITermTab renames an iTerm2 tab
+func (a *App) RenameITermTab(windowID, tabIndex int, newName string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.RenameTab(windowID, tabIndex, newName)
+}
+
 // CreateITermTab creates a new tab in iTerm2 at the specified directory with a name
 func (a *App) CreateITermTab(workingDir, tabName string) error {
 	if a.itermController == nil {
@@ -632,6 +640,22 @@ func (a *App) WriteITermText(text string, pressEnter bool) error {
 		return fmt.Errorf("iTerm controller not initialized")
 	}
 	return a.itermController.WriteText(text, pressEnter)
+}
+
+// GetITermSessionContents returns the last N lines from the active iTerm2 session
+func (a *App) GetITermSessionContents(lines int) (string, error) {
+	if a.itermController == nil {
+		return "", fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.GetSessionContents(lines)
+}
+
+// GetITermSessionInfo returns information about the active iTerm2 session
+func (a *App) GetITermSessionInfo() (*iterm.SessionInfo, error) {
+	if a.itermController == nil {
+		return nil, fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.GetSessionInfo()
 }
 
 // ============================================
@@ -1726,7 +1750,7 @@ func (a *App) StartRemoteAccess(config remote.Config) (*RemoteAccessStatus, erro
 
 	// Initialize remote server if needed
 	if a.remoteServer == nil {
-		a.remoteServer = remote.NewServer(a.terminalManager)
+		a.remoteServer = remote.NewServer(a.itermController)
 		a.remoteServer.SetProjectHandler(&remoteProjectHandler{app: a})
 		a.setupApprovedClientsCallback()
 		a.loadApprovedClients()

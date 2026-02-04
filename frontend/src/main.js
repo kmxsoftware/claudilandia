@@ -98,8 +98,15 @@ import {
   initTodoDashboard,
   setTodoDashboardCallbacks,
   loadTodos,
+  renderTodoDashboard,
   initTodoDashboardHandler
 } from './modules/todo-dashboard.js';
+
+// Terminal dashboard module (center panel)
+import {
+  initTerminalDashboard,
+  initTerminalDashboardHandler
+} from './modules/terminal-dashboard.js';
 
 // Git dashboard module
 import {
@@ -188,6 +195,7 @@ async function init() {
   initNotesHandler();
   initTestDashboardHandler();
   initTodoDashboardHandler();
+  initTerminalDashboardHandler();
   initGitDashboardHandler();
   initGitHandler();
   initToolsPanelHandler();
@@ -286,8 +294,11 @@ async function init() {
   // Initialize test dashboard (QA)
   initTestDashboard();
 
-  // Initialize todo dashboard
+  // Initialize todo dashboard (right sidebar)
   initTodoDashboard();
+
+  // Initialize terminal dashboard (center panel)
+  initTerminalDashboard();
 
   // Initialize git dashboard
   initGitDashboard();
@@ -337,14 +348,6 @@ function render() {
                 <span class="icon">🐳</span> Docker
               </button>
             </div>
-          </div>
-
-          <div class="sidebar-section terminals-section">
-            <div class="iterm-header">
-              <h3>iTerm2</h3>
-              <button class="iterm-add-btn" onclick="window.itermCreateTab()" title="New Terminal Tab">+</button>
-            </div>
-            <div id="iterm-panel" class="iterm-panel-sidebar"></div>
           </div>
 
           <div class="sidebar-section git-section">
@@ -524,6 +527,9 @@ function render() {
 
         <!-- Right Sidebar -->
         <div class="sidebar right-sidebar" id="rightSidebar">
+          <div class="sidebar-section todo-section" id="todoSidebarSection">
+            <!-- Todo section rendered by todo-dashboard.js -->
+          </div>
           <div class="sidebar-section notes-section" id="notesSection">
             <!-- Notes section rendered by notes.js -->
           </div>

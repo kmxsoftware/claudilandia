@@ -402,6 +402,31 @@ export namespace iterm {
 		    return a;
 		}
 	}
+	
+	export class SessionInfo {
+	    name: string;
+	    profileName: string;
+	    columns: number;
+	    rows: number;
+	    currentCommand: string;
+	    jobPid: number;
+	    isProcessing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.profileName = source["profileName"];
+	        this.columns = source["columns"];
+	        this.rows = source["rows"];
+	        this.currentCommand = source["currentCommand"];
+	        this.jobPid = source["jobPid"];
+	        this.isProcessing = source["isProcessing"];
+	    }
+	}
 
 }
 

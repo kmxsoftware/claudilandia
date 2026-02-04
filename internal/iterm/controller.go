@@ -328,6 +328,44 @@ end tell
 	return nil
 }
 
+// RenameTab renames a specific tab in iTerm2
+func (c *Controller) RenameTab(windowID, tabIndex int, newName string) error {
+	// Sanitize the new name
+	escapedName := strings.ReplaceAll(newName, "\n", "")
+	escapedName = strings.ReplaceAll(escapedName, "\r", "")
+	escapedName = strings.ReplaceAll(escapedName, "\\", "\\\\")
+	escapedName = strings.ReplaceAll(escapedName, "\"", "\\\"")
+
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		if id of w is %d then
+			tell tab %d of w
+				tell current session
+					set name to "%s"
+				end tell
+			end tell
+			return true
+		end if
+	end repeat
+	return false
+end tell
+`, windowID, tabIndex, escapedName)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to rename iTerm2 tab", "windowId", windowID, "tabIndex", tabIndex, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("tab not found: window %d, tab %d", windowID, tabIndex)
+	}
+
+	logging.Info("Renamed iTerm2 tab", "windowId", windowID, "tabIndex", tabIndex, "newName", newName)
+	return nil
+}
+
 // FocusITerm brings iTerm2 to the foreground
 func (c *Controller) FocusITerm() error {
 	script := `tell application "iTerm2" to activate`

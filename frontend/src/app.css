@@ -193,6 +193,17 @@ body {
   border-left: 1px solid var(--border);
 }
 
+/* Todo Section in Right Sidebar */
+.right-sidebar .todo-section {
+  height: 45%;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
 .right-sidebar .notes-section {
   flex: 1;
   display: flex;
@@ -1560,10 +1571,10 @@ body {
   background: var(--text-muted);
 }
 
-/* Git Section */
+/* Git Section - docked to bottom */
 .git-section {
   flex-shrink: 0;
-  flex-grow: 1;
+  flex-grow: 0;
   display: flex;
   flex-direction: column;
   min-height: 100px;
@@ -1571,7 +1582,7 @@ body {
   overflow: hidden;
   position: relative;
   border-top: 1px solid var(--border);
-  margin-top: -1px;
+  margin-top: auto;
 }
 
 .git-section-resizer {

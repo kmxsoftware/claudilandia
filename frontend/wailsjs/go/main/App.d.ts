@@ -110,6 +110,10 @@ export function GetGlobalPrompts():Promise<Array<state.Prompt>>;
 
 export function GetHookScriptContent(arg1:string,arg2:string):Promise<string>;
 
+export function GetITermSessionContents(arg1:number):Promise<string>;
+
+export function GetITermSessionInfo():Promise<iterm.SessionInfo>;
+
 export function GetITermStatus():Promise<iterm.ITermStatus>;
 
 export function GetInstalledSkills(arg1:string):Promise<Array<string>>;
@@ -237,6 +241,8 @@ export function RemoveBookmark(arg1:string,arg2:string):Promise<void>;
 export function RemoveHook(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RemoveMCPServer(arg1:string,arg2:string):Promise<void>;
+
+export function RenameITermTab(arg1:number,arg2:number,arg3:string):Promise<void>;
 
 export function ResetTestState(arg1:string):Promise<void>;
 
