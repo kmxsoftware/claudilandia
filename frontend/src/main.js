@@ -1,27 +1,10 @@
 import './style.css';
 import './app.css';
-// Note: xterm.css removed - using iTerm2 integration instead
 import 'highlight.js/styles/github-dark.css';
 
 // Module imports
-import { state, getTerminals } from './modules/state.js';
+import { state } from './modules/state.js';
 import { escapeHtml, textToBase64 } from './modules/utils.js';
-import {
-  createTerminal,
-  createTerminalFromInfo,
-  renderTerminalTabs,
-  switchTerminal,
-  closeTerminal,
-  setTerminalCallbacks,
-  initTerminalHandler,
-  applyTerminalTheme,
-  initSearchAddon,
-  searchTerminal,
-  searchTerminalNext,
-  searchTerminalPrev,
-  clearTerminalSearch
-} from './modules/terminal.js';
-import { fitWithScrollPreservation } from './modules/terminal-utils.js';
 import {
   refreshContainers,
   renderContainers,
@@ -61,16 +44,9 @@ import {
   renderBrowserTabs,
   loadBrowserTabs,
   initBrowserHandler,
-  expandBrowserPanel,
-  openInExternalBrowser
+  openInExternalBrowser,
+  setUIStateCallbacks
 } from './modules/browser.js';
-import {
-  initSplitView,
-  updateSplitRatio,
-  setSplitViewCallbacks,
-  setUIStateCallbacks,
-  initUIStateHandler
-} from './modules/split-view.js';
 import {
   renderProjectTabs,
   selectProject,
@@ -144,68 +120,7 @@ import {
   initITermPanel
 } from './modules/iterm-panel.js';
 
-// DEC mode 2026 markers (sync blocks) - we strip these to prevent buffering freeze
-const SYNC_START = new Uint8Array([0x1b, 0x5b, 0x3f, 0x32, 0x30, 0x32, 0x36, 0x68]); // \x1b[?2026h
-const SYNC_END = new Uint8Array([0x1b, 0x5b, 0x3f, 0x32, 0x30, 0x32, 0x36, 0x6c]);   // \x1b[?2026l
-
-/**
- * Find a byte sequence in a Uint8Array
- * @param {Uint8Array} haystack - Array to search in
- * @param {Uint8Array} needle - Sequence to find
- * @returns {number} Index of first match, or -1 if not found
- */
-function findSequence(haystack, needle) {
-  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return i;
-  }
-  return -1;
-}
-
-/**
- * Remove DEC mode 2026 sync block markers from terminal output.
- *
- * Problem: Claude Code uses sync blocks (\x1b[?2026h ... \x1b[?2026l) for atomic
- * screen updates. This causes xterm.js to buffer ALL data before rendering,
- * leading to 15+ second freezes during /resume with long history.
- *
- * Solution: Strip sync markers so xterm.js renders incrementally.
- * This may cause minor visual flickering but eliminates freezes.
- *
- * @param {Uint8Array} bytes - Terminal output bytes
- * @returns {Uint8Array} Processed bytes (sync markers removed)
- */
-function processTerminalOutput(bytes) {
-  // Remove sync block markers to prevent xterm.js from buffering
-  // This allows incremental rendering instead of atomic updates
-  let result = bytes;
-
-  // Remove SYNC_START marker (\x1b[?2026h)
-  let startIdx = findSequence(result, SYNC_START);
-  while (startIdx !== -1) {
-    const before = result.slice(0, startIdx);
-    const after = result.slice(startIdx + SYNC_START.length);
-    result = new Uint8Array(before.length + after.length);
-    result.set(before, 0);
-    result.set(after, before.length);
-    startIdx = findSequence(result, SYNC_START);
-  }
-
-  // Remove SYNC_END marker (\x1b[?2026l)
-  let endIdx = findSequence(result, SYNC_END);
-  while (endIdx !== -1) {
-    const before = result.slice(0, endIdx);
-    const after = result.slice(endIdx + SYNC_END.length);
-    result = new Uint8Array(before.length + after.length);
-    result.set(before, 0);
-    result.set(after, before.length);
-    endIdx = findSequence(result, SYNC_END);
-  }
-
-  return result;
-}
+// NOTE: xterm.js terminal removed - using iTerm2 integration instead
 
 // Backend imports
 import {
@@ -218,7 +133,6 @@ import {
   SelectDirectory,
   GetDefaultColors,
   GetDefaultIcons,
-  GetProjectTerminals,
   UpdateUIState,
   IsDockerAvailable,
   SaveNotes,
@@ -236,40 +150,21 @@ import {
   CheckProjectCoverage,
   GetTodos,
   SaveTodos,
-  GetGitHistory,
-  PauseTerminal,
-  ResumeTerminal,
-  GetTerminalTheme
+  GetGitHistory
 } from '../wailsjs/go/main/App';
 import { EventsOn, WindowToggleMaximise } from '../wailsjs/runtime/runtime';
 
 // Module callbacks will be set up in init()
 
-// Helper to insert text to active terminal
+// Helper to insert text to terminal (no-op: xterm.js removed, using iTerm2)
 function insertToTerminal(text) {
-  if (!state.activeTerminalId) return;
-  const terminals = getTerminals();
-  const termData = terminals.get(state.activeTerminalId);
-  if (termData && termData.terminal) {
-    import('../wailsjs/go/main/App').then(({ WriteTerminal }) => {
-      WriteTerminal(state.activeTerminalId, textToBase64(text));
-    });
-  }
+  // TODO: Could implement iTerm2 paste via AppleScript in the future
+  console.log('insertToTerminal: iTerm2 integration - text not inserted:', text.substring(0, 50));
 }
 
 // Initialize app
 async function init() {
   // Setup module callbacks
-  setTerminalCallbacks({
-    switchTab,
-    updateClaudeStatusUI,
-    onTerminalActivated: () => {
-      // Refresh prompts tab when terminal changes
-      if (toolsState.activeTab === 'prompts') {
-        renderToolsPanel();
-      }
-    }
-  });
   setGitCallbacks({
     showGitDiff
   });
@@ -280,25 +175,20 @@ async function init() {
 
   // Setup new module callbacks
   setBrowserCallbacks({
-    saveBrowserState: saveUIState  // Browser state is now just UI state
-  });
-  setSplitViewCallbacks({
-    saveUIState
+    saveBrowserState: saveUIState
   });
 
-  // Setup UI state callbacks (for switchTab)
+  // Setup UI state callbacks (for switchTab on project change)
   setUIStateCallbacks({
     switchTab
   });
 
   // Initialize project switcher handlers
   initBrowserHandler();
-  initTerminalHandler();
   initNotesHandler();
   initTestDashboardHandler();
   initTodoDashboardHandler();
   initGitDashboardHandler();
-  initUIStateHandler();
   initGitHandler();
   initToolsPanelHandler();
   initStructureHandler();
@@ -352,116 +242,7 @@ async function init() {
   const appState = await GetState();
   state.projects = Object.values(appState.projects || {});
 
-  // Load terminal theme
-  const terminalTheme = await GetTerminalTheme();
-  state.terminalTheme = terminalTheme || 'dracula';
-
-  // Setup event listeners for terminal output with project context
-  // Flow control using HIGH/LOW watermarks to prevent xterm.js buffer overflow
-  // See: https://xtermjs.org/docs/guides/flowcontrol/
-  const flowControlState = new Map(); // terminalId -> { watermark, paused }
-  // Lower watermarks to account for base64 overhead (33%) and rendering lag
-  const HIGH_WATERMARK = 50000;   // 50KB - pause backend (becomes ~67KB base64)
-  const LOW_WATERMARK = 5000;     // 5KB - resume backend
-
-  EventsOn('state:terminal:output', (data) => {
-    const { projectId, id, data: base64Data } = data;
-    const terminals = state.projectTerminals.get(projectId);
-    if (!terminals) return;
-
-    const termData = terminals.get(id);
-    if (!termData) return;
-
-    // Decode base64 to bytes
-    const binaryString = atob(base64Data);
-    let bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // Remove sync block markers to prevent xterm.js buffering freeze
-    bytes = processTerminalOutput(bytes);
-
-    // Initialize flow control state for this terminal
-    if (!flowControlState.has(id)) {
-      flowControlState.set(id, { watermark: 0, paused: false });
-    }
-    const flow = flowControlState.get(id);
-
-    // Track bytes in flight
-    flow.watermark += bytes.length;
-    const chunkSize = bytes.length;
-
-    // Write with callback for backpressure
-    // Use requestAnimationFrame to wait for actual render, not just queue
-    termData.terminal.write(bytes, () => {
-      requestAnimationFrame(() => {
-        flow.watermark = Math.max(flow.watermark - chunkSize, 0);
-        // Resume if we've drained below LOW_WATERMARK
-        if (flow.paused && flow.watermark < LOW_WATERMARK) {
-          flow.paused = false;
-          ResumeTerminal(id);
-        }
-      });
-    });
-
-    // Pause backend if we're overwhelmed
-    if (!flow.paused && flow.watermark > HIGH_WATERMARK) {
-      flow.paused = true;
-      PauseTerminal(id);
-    }
-  });
-
-  EventsOn('state:terminal:exit', (data) => {
-    const { projectId, terminalId } = data;
-    const terminals = state.projectTerminals.get(projectId);
-    if (terminals) {
-      const termData = terminals.get(terminalId);
-      if (termData) {
-        termData.terminal.write('\r\n\x1b[31m[Process exited]\x1b[0m\r\n');
-        termData.info.running = false;
-        if (state.activeProject?.id === projectId) {
-          renderTerminalTabs();
-        }
-      }
-    }
-  });
-
-  EventsOn('state:terminal:theme', (themeName) => {
-    // Theme changed externally (e.g., from another window)
-    applyTerminalTheme(themeName);
-    renderTerminalTabs();
-  });
-
-  EventsOn('state:terminal:created', (data) => {
-    const { projectId, terminal } = data;
-    // Create terminal UI if it doesn't exist (e.g., created via remote client)
-    createTerminalFromInfo(terminal, projectId);
-  });
-
-  EventsOn('state:terminal:deleted', (data) => {
-    const { projectId, terminalId } = data;
-    // Clean up if terminal was deleted externally
-    const terminals = state.projectTerminals.get(projectId);
-    if (terminals && terminals.has(terminalId)) {
-      const termData = terminals.get(terminalId);
-      if (termData.resizeObserver) {
-        termData.resizeObserver.disconnect();
-      }
-      termData.terminal.dispose();
-      terminals.delete(terminalId);
-
-      // Clean up flow control state
-      flowControlState.delete(terminalId);
-
-      const wrapper = document.getElementById(`term-wrapper-${terminalId}`);
-      if (wrapper) wrapper.remove();
-
-      if (state.activeProject?.id === projectId) {
-        renderTerminalTabs();
-      }
-    }
-  });
+  // NOTE: Terminal theme and xterm.js event handlers removed - using iTerm2 integration
 
   EventsOn('state:activeProject:changed', (data) => {
     const { projectId, state: projectState } = data;
@@ -636,22 +417,7 @@ function render() {
               </div>
             </div>
 
-            <!-- Hidden terminal panel (kept for compatibility) -->
-            <div id="terminalPanel" class="tab-panel" style="display: none;">
-              <div class="terminal-panel-container">
-                <div class="terminal-panel-main">
-                  <div id="terminalTabsBar" class="terminal-tabs-bar" style="display: none;"></div>
-                  <div id="terminalContainer" class="terminal-container" style="display: none;"></div>
-                  <div id="terminalSearchBar" class="terminal-search-bar" style="display: none;">
-                    <input type="text" id="terminalSearchInput" placeholder="Search..." />
-                    <span id="terminalSearchResults" class="terminal-search-results">0/0</span>
-                    <button id="terminalSearchPrev" title="Previous (Shift+Enter)">↑</button>
-                    <button id="terminalSearchNext" title="Next (Enter)">↓</button>
-                    <button id="terminalSearchClose" class="close-btn" title="Close (Escape)">×</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- NOTE: Terminal panel removed - using iTerm2 integration -->
 
             <div id="dockerPanel" class="tab-panel">
               <div class="docker-content">
@@ -1172,100 +938,7 @@ function switchTab(tabName) {
 }
 
 // Terminal Search Bar (Cmd+F / Ctrl+F)
-function setupTerminalSearch() {
-  const searchBar = document.getElementById('terminalSearchBar');
-  const searchInput = document.getElementById('terminalSearchInput');
-  const searchResults = document.getElementById('terminalSearchResults');
-  const searchPrev = document.getElementById('terminalSearchPrev');
-  const searchNext = document.getElementById('terminalSearchNext');
-  const searchClose = document.getElementById('terminalSearchClose');
-
-  if (!searchBar || !searchInput) return;
-
-  let currentResults = { resultIndex: -1, resultCount: 0 };
-
-  function updateResults(results) {
-    if (results) {
-      currentResults = results;
-      if (results.resultCount > 0) {
-        searchResults.textContent = `${results.resultIndex + 1}/${results.resultCount}`;
-      } else {
-        searchResults.textContent = 'No results';
-      }
-    }
-  }
-
-  function showSearchBar() {
-    searchBar.style.display = 'flex';
-    searchInput.focus();
-    searchInput.select();
-  }
-
-  function hideSearchBar() {
-    searchBar.style.display = 'none';
-    searchInput.value = '';
-    searchResults.textContent = '0/0';
-    if (state.activeTerminalId) {
-      clearTerminalSearch(state.activeTerminalId);
-      const termData = getTerminals().get(state.activeTerminalId);
-      if (termData) termData.terminal.focus();
-    }
-  }
-
-  // Keyboard shortcut: Cmd+F / Ctrl+F
-  document.addEventListener('keydown', async (e) => {
-    // Cmd+F or Ctrl+F to open search
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-      if (state.activeTab === 'terminal' || state.activeTab === 'default') {
-        if (state.activeTerminalId) {
-          e.preventDefault();
-          showSearchBar();
-        }
-      }
-    }
-
-    // Escape to close search
-    if (e.key === 'Escape' && searchBar.style.display !== 'none') {
-      hideSearchBar();
-    }
-  });
-
-  // Search input handler
-  let searchTimeout = null;
-  searchInput.addEventListener('input', async () => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(async () => {
-      if (state.activeTerminalId) {
-        const results = await searchTerminal(state.activeTerminalId, searchInput.value);
-        updateResults(results);
-      }
-    }, 150);
-  });
-
-  // Enter to find next, Shift+Enter to find previous
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        searchTerminalPrev(state.activeTerminalId);
-      } else {
-        searchTerminalNext(state.activeTerminalId);
-      }
-    }
-  });
-
-  // Button handlers
-  searchPrev.addEventListener('click', () => {
-    searchTerminalPrev(state.activeTerminalId);
-  });
-
-  searchNext.addEventListener('click', () => {
-    searchTerminalNext(state.activeTerminalId);
-  });
-
-  searchClose.addEventListener('click', hideSearchBar);
-}
+// NOTE: Terminal search removed - using iTerm2's native search
 
 // Start the app
 init();
-setupTerminalSearch();

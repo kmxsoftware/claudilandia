@@ -1,8 +1,7 @@
-import { state, getTerminals } from './state.js';
+import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { marked } from 'marked';
 import { createModuleLogger } from './logger.js';
-import { fitWithScrollPreservation } from './terminal-utils.js';
 
 const logger = createModuleLogger('ToolsPanel');
 import {
@@ -237,7 +236,6 @@ function updateStatusBar(tabName) {
 function minimizeToolsPanel() {
   const panel = document.getElementById('projectToolsPanel');
   const resizer = document.getElementById('toolsPanelResizer');
-  const terminalMain = document.querySelector('.terminal-panel-main');
 
   if (!panel) return;
 
@@ -248,27 +246,13 @@ function minimizeToolsPanel() {
     resizer.style.display = 'none';
   }
 
-  // Terminal takes all remaining space
-  if (terminalMain) {
-    terminalMain.style.flex = '1 1 auto';
-  }
-
   // Update status bar with current tab
   updateStatusBar(toolsState.activeTab);
-
-  // Fit terminal after panel minimize
-  if (state.activeTerminalId) {
-    const termData = getTerminals().get(state.activeTerminalId);
-    if (termData) {
-      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
-    }
-  }
 }
 
 function expandToolsPanel() {
   const panel = document.getElementById('projectToolsPanel');
   const resizer = document.getElementById('toolsPanelResizer');
-  const terminalMain = document.querySelector('.terminal-panel-main');
 
   if (!panel) return;
 
@@ -277,20 +261,6 @@ function expandToolsPanel() {
 
   if (resizer) {
     resizer.style.display = 'flex';
-  }
-
-  // Restore terminal/panel sizes
-  if (terminalMain) {
-    terminalMain.style.flex = `0 0 ${100 - toolsState.panelHeight}%`;
-    panel.style.flex = `0 0 ${toolsState.panelHeight}%`;
-  }
-
-  // Fit terminal after panel expand
-  if (state.activeTerminalId) {
-    const termData = getTerminals().get(state.activeTerminalId);
-    if (termData) {
-      setTimeout(() => fitWithScrollPreservation(termData.terminal, termData.fitAddon), 50);
-    }
   }
 }
 

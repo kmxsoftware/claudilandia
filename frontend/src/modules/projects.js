@@ -1,9 +1,8 @@
 // Projects module - project tabs and workspace info
 
-import { state, getTerminals } from './state.js';
+import { state } from './state.js';
 import { DeleteProject, UpdateProject, SelectDirectory } from '../../wailsjs/go/main/App';
 import { updateAllProjectClaudeStatus } from './claude-status.js';
-import { switchTerminal } from './terminal.js';
 import { switchProject } from './project-switcher.js';
 import { renderITermPanel, focusProjectTab } from './iterm-panel.js';
 

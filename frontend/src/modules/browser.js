@@ -3,7 +3,6 @@
 import { state } from './state.js';
 import { createModuleLogger } from './logger.js';
 import { normalizeUrl } from './utils.js';
-import { fitWithScrollPreservation } from './terminal-utils.js';
 import { QA_TAB_ID, showQAPanel, updateTestDashboard } from './test-dashboard.js';
 import { DASHBOARD_TAB_ID, showDashboardPanel, renderTodoDashboard } from './todo-dashboard.js';
 import { STRUCTURE_TAB_ID, showStructurePanel, switchToStructureTab } from './structure-panel.jsx';
@@ -273,13 +272,16 @@ function updateBrowserStatusBar() {
   }
 }
 
-// DEPRECATED: Split view removed - these are no-ops for backward compatibility
-export function minimizeBrowserPanel() {
-  // No-op: split view is disabled
-}
+// ============================================
+// UI State Callbacks (moved from split-view.js)
+// ============================================
 
-export function expandBrowserPanel() {
-  // No-op: split view is disabled
+let onSwitchTab = null;
+
+export function setUIStateCallbacks(callbacks) {
+  if (callbacks.switchTab) {
+    onSwitchTab = callbacks.switchTab;
+  }
 }
 
 // ============================================
@@ -306,13 +308,23 @@ export function initBrowserHandler() {
       const { projectState } = ctx;
       if (!projectState) return;
 
+      // Ensure browser panel is active (no split view)
+      const browserPanel = document.getElementById('browserPanel');
+      if (browserPanel) {
+        browserPanel.classList.add('active');
+      }
+
       // Restore active tab
       const activeTabId = projectState.browser?.activeTabId || DASHBOARD_TAB_ID;
       loadBrowserTabs(null, activeTabId);
     },
 
     onAfterSwitch: async (ctx) => {
-      // Nothing additional needed
+      // Call switchTab callback to update UI state
+      const { projectState } = ctx;
+      if (onSwitchTab) {
+        onSwitchTab(projectState?.activeTab || 'browser');
+      }
     }
   });
 }
