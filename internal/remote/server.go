@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"projecthub/internal/iterm"
 	"projecthub/internal/logging"
-	"projecthub/internal/terminal"
 
 	"github.com/gorilla/websocket"
 )
@@ -34,6 +35,7 @@ const (
 	MsgTypeCreateTerminal MessageType = "createTerminal"
 	MsgTypeRenameTerminal MessageType = "renameTerminal"
 	MsgTypeDeleteTerminal MessageType = "deleteTerminal"
+	MsgTypeSwitchTab      MessageType = "switchTab"
 )
 
 // Security constants
@@ -125,7 +127,7 @@ type ProjectHandler interface {
 
 // Server handles remote terminal access via WebSocket
 type Server struct {
-	termManager      *terminal.Manager
+	itermController  *iterm.Controller
 	projectHandler   ProjectHandler
 	token            string
 	tokenExpiry      time.Time
@@ -139,16 +141,20 @@ type Server struct {
 	upgrader         websocket.Upgrader
 	running          bool
 	onApprovedChange func() // callback when approved clients change
+	outputTicker     *time.Ticker
+	stopOutput       chan struct{}
+	lastOutput       string // track last output to detect changes
 }
 
 // NewServer creates a new remote access server
-func NewServer(tm *terminal.Manager) *Server {
+func NewServer(ic *iterm.Controller) *Server {
 	s := &Server{
-		termManager:     tm,
+		itermController: ic,
 		clients:         make(map[*websocket.Conn]*ClientInfo),
 		authAttempts:    make(map[string]*authAttempt),
 		approvedClients: make(map[string]*ApprovedClient),
 		port:            9090,
+		stopOutput:      make(chan struct{}),
 	}
 
 	s.upgrader = websocket.Upgrader{
@@ -408,7 +414,11 @@ func (s *Server) Start(port int) error {
 	}
 	s.port = port
 	s.running = true
+	s.stopOutput = make(chan struct{})
 	s.mu.Unlock()
+
+	// Start output polling for iTerm2 content
+	s.startOutputPolling()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.serveClient)
@@ -428,6 +438,60 @@ func (s *Server) Start(port int) error {
 	return s.server.ListenAndServe()
 }
 
+// startOutputPolling polls iTerm2 for terminal output and broadcasts to clients
+func (s *Server) startOutputPolling() {
+	s.outputTicker = time.NewTicker(500 * time.Millisecond) // Poll every 500ms
+
+	go func() {
+		for {
+			select {
+			case <-s.outputTicker.C:
+				s.pollAndBroadcastOutput()
+			case <-s.stopOutput:
+				s.outputTicker.Stop()
+				return
+			}
+		}
+	}()
+	logging.Info("iTerm2 output polling started")
+}
+
+// pollAndBroadcastOutput polls iTerm2 for output and broadcasts changes
+func (s *Server) pollAndBroadcastOutput() {
+	// Check if we have any connected clients
+	s.mu.RLock()
+	clientCount := len(s.clients)
+	s.mu.RUnlock()
+
+	if clientCount == 0 {
+		return // No clients to broadcast to
+	}
+
+	if s.itermController == nil {
+		return
+	}
+
+	// Get current terminal contents
+	contents, err := s.itermController.GetSessionContents(100) // Get last 100 lines
+	if err != nil {
+		// iTerm2 might not be running - just skip
+		return
+	}
+
+	// Only broadcast if content changed
+	s.mu.Lock()
+	if contents == s.lastOutput {
+		s.mu.Unlock()
+		return
+	}
+	s.lastOutput = contents
+	s.mu.Unlock()
+
+	// Encode and broadcast to all clients (empty termId = broadcast to everyone)
+	encoded := base64.StdEncoding.EncodeToString([]byte(contents))
+	s.BroadcastOutput("", encoded)
+}
+
 // Stop stops the remote access server with graceful shutdown
 func (s *Server) Stop() error {
 	s.mu.Lock()
@@ -439,6 +503,12 @@ func (s *Server) Stop() error {
 
 	s.running = false
 	s.token = ""
+
+	// Stop output polling
+	if s.stopOutput != nil {
+		close(s.stopOutput)
+		s.stopOutput = nil
+	}
 
 	// Copy client list to close outside the main lock
 	clientsToClose := make([]*struct {
@@ -530,8 +600,10 @@ func (s *Server) BroadcastOutput(termID string, data string) {
 
 	logging.Debug("Checking clients for broadcast", "totalClients", len(s.clients))
 	for conn, info := range s.clients {
-		logging.Debug("Client check", "clientTermID", info.TerminalID, "broadcastTermID", termID, "match", info.TerminalID == termID || info.TerminalID == "")
-		if info.TerminalID == termID || info.TerminalID == "" {
+		// Broadcast to all if termID is empty, or if client is watching this specific terminal
+		shouldSend := termID == "" || info.TerminalID == termID || info.TerminalID == ""
+		logging.Debug("Client check", "clientTermID", info.TerminalID, "broadcastTermID", termID, "shouldSend", shouldSend)
+		if shouldSend {
 			clients = append(clients, &struct {
 				conn *websocket.Conn
 				info *ClientInfo
@@ -684,17 +756,26 @@ func (s *Server) handleTokenInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// getTerminalsList returns list of terminals
+// getTerminalsList returns list of iTerm2 tabs as terminals
 func (s *Server) getTerminalsList() []TerminalInfo {
-	terms := s.termManager.List()
-	list := make([]TerminalInfo, len(terms))
-	for i, t := range terms {
-		info := t.Info()
+	if s.itermController == nil {
+		return []TerminalInfo{}
+	}
+
+	status, err := s.itermController.GetStatus()
+	if err != nil || !status.Running {
+		return []TerminalInfo{}
+	}
+
+	list := make([]TerminalInfo, len(status.Tabs))
+	for i, tab := range status.Tabs {
+		// Create a unique ID from windowId and tabIndex
+		tabID := fmt.Sprintf("iterm-%d-%d", tab.WindowID, tab.TabIndex)
 		list[i] = TerminalInfo{
-			ID:      info.ID,
-			Name:    info.Name,
-			WorkDir: info.WorkDir,
-			Running: info.Running,
+			ID:      tabID,
+			Name:    tab.Name,
+			WorkDir: "", // iTerm2 tabs don't expose working directory easily
+			Running: tab.IsActive,
 		}
 	}
 	return list
@@ -770,8 +851,8 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	logging.Info("Remote client connected", "clientId", clientID, "remoteAddr", r.RemoteAddr)
 
-	// Send initial projects list (with terminals)
-	s.sendProjectsList(conn, clientInfo)
+	// Send initial terminals list (iTerm2 tabs)
+	s.sendTerminalsList(conn, clientInfo)
 
 	// Handle messages
 	defer func() {
@@ -806,55 +887,54 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, client *ClientInfo, m
 	switch msg.Type {
 	case MsgTypeInput:
 		logging.Debug("Received input message", "termID", msg.TermID, "dataLen", len(msg.Data))
-		if msg.TermID == "" {
-			s.sendError(conn, client, "Terminal ID required")
-			return
-		}
+
 		// Update client's current terminal
 		s.mu.Lock()
-		client.TerminalID = msg.TermID
+		if msg.TermID != "" {
+			client.TerminalID = msg.TermID
+		}
 		s.mu.Unlock()
 
-		// Write to terminal
-		if err := s.termManager.Write(msg.TermID, []byte(msg.Data)); err != nil {
-			logging.Error("Failed to write to terminal", "termID", msg.TermID, "error", err)
-			s.sendError(conn, client, fmt.Sprintf("Failed to write to terminal: %v", err))
+		// Write to iTerm2 active session
+		if s.itermController != nil {
+			// The input is sent directly to iTerm2's active session
+			// For special keys, we handle them appropriately
+			input := msg.Data
+
+			// Check if this is a special key (Enter)
+			pressEnter := false
+			if input == "\r" || input == "\n" {
+				input = ""
+				pressEnter = true
+			} else if strings.HasSuffix(input, "\r") || strings.HasSuffix(input, "\n") {
+				input = strings.TrimSuffix(strings.TrimSuffix(input, "\r"), "\n")
+				pressEnter = true
+			}
+
+			if err := s.itermController.WriteText(input, pressEnter); err != nil {
+				logging.Error("Failed to write to iTerm2", "error", err)
+				s.sendError(conn, client, fmt.Sprintf("Failed to write to iTerm2: %v", err))
+			} else {
+				logging.Debug("Wrote to iTerm2 successfully")
+			}
 		} else {
-			logging.Debug("Wrote to terminal successfully", "termID", msg.TermID)
+			s.sendError(conn, client, "iTerm2 controller not available")
 		}
 
 	case MsgTypeResize:
-		if msg.TermID == "" {
-			s.sendError(conn, client, "Terminal ID required")
-			return
-		}
-
-		// Update client's current terminal (so they receive output for this terminal)
+		// Update client's current terminal for output tracking
 		s.mu.Lock()
-		previousTermID := client.TerminalID
-		client.TerminalID = msg.TermID
+		if msg.TermID != "" {
+			client.TerminalID = msg.TermID
+		}
 		s.mu.Unlock()
 
-		// Validate resize dimensions
-		if msg.Rows < minResizeRows || msg.Rows > maxResizeRows ||
-			msg.Cols < minResizeCols || msg.Cols > maxResizeCols {
-			s.sendError(conn, client, fmt.Sprintf("Invalid terminal dimensions: rows must be %d-%d, cols must be %d-%d",
-				minResizeRows, maxResizeRows, minResizeCols, maxResizeCols))
-			return
-		}
-
-		if err := s.termManager.Resize(msg.TermID, uint16(msg.Rows), uint16(msg.Cols)); err != nil {
-			s.sendError(conn, client, fmt.Sprintf("Failed to resize terminal: %v", err))
-		}
-
-		// If switching to a new terminal, trigger a screen redraw by sending Ctrl+L
-		if previousTermID != msg.TermID {
-			// Send Ctrl+L (form feed) to trigger screen redraw in most shells/applications
-			s.termManager.Write(msg.TermID, []byte{0x0c})
-		}
+		// iTerm2 manages its own terminal sizing - we don't resize it
+		// Just acknowledge the resize request (needed for xterm.js on client)
+		logging.Debug("Resize request received (iTerm2 manages sizing)", "rows", msg.Rows, "cols", msg.Cols)
 
 	case MsgTypeList:
-		s.sendProjectsList(conn, client)
+		s.sendTerminalsList(conn, client)
 
 	case MsgTypeCreateTerminal:
 		s.handleCreateTerminal(conn, client, msg)
@@ -864,6 +944,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, client *ClientInfo, m
 
 	case MsgTypeDeleteTerminal:
 		s.handleDeleteTerminal(conn, client, msg)
+
+	case MsgTypeSwitchTab:
+		s.handleSwitchTab(conn, client, msg)
 
 	case MsgTypePing:
 		s.sendPong(conn, client)
@@ -1035,6 +1118,40 @@ func (s *Server) handleDeleteTerminal(conn *websocket.Conn, client *ClientInfo, 
 
 	// Broadcast updated projects list to all clients
 	s.BroadcastProjectsList()
+}
+
+// handleSwitchTab switches to the specified iTerm2 tab
+func (s *Server) handleSwitchTab(conn *websocket.Conn, client *ClientInfo, msg *ClientMessage) {
+	if s.itermController == nil {
+		s.sendError(conn, client, "iTerm2 controller not available")
+		return
+	}
+
+	if msg.TermID == "" {
+		s.sendError(conn, client, "Terminal ID required")
+		return
+	}
+
+	// Parse terminal ID: format is "iterm-{windowId}-{tabIndex}"
+	var windowID, tabIndex int
+	_, err := fmt.Sscanf(msg.TermID, "iterm-%d-%d", &windowID, &tabIndex)
+	if err != nil {
+		s.sendError(conn, client, fmt.Sprintf("Invalid terminal ID format: %s", msg.TermID))
+		return
+	}
+
+	// Switch to the tab
+	if err := s.itermController.SwitchTab(windowID, tabIndex); err != nil {
+		s.sendError(conn, client, fmt.Sprintf("Failed to switch tab: %v", err))
+		return
+	}
+
+	logging.Info("Switched iTerm2 tab via remote", "windowID", windowID, "tabIndex", tabIndex)
+
+	// Update client's current terminal
+	s.mu.Lock()
+	client.TerminalID = msg.TermID
+	s.mu.Unlock()
 }
 
 // sendError sends an error message to a client

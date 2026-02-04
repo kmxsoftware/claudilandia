@@ -395,3 +395,102 @@ func (c *Controller) runAppleScript(script string) (string, error) {
 func ParseTabIndex(s string) (int, error) {
 	return strconv.Atoi(s)
 }
+
+// SessionInfo contains information about the active iTerm2 session
+type SessionInfo struct {
+	Name           string `json:"name"`
+	ProfileName    string `json:"profileName"`
+	Columns        int    `json:"columns"`
+	Rows           int    `json:"rows"`
+	CurrentCommand string `json:"currentCommand"`
+	JobPid         int    `json:"jobPid"`
+	IsProcessing   bool   `json:"isProcessing"`
+}
+
+// GetSessionContents returns the last N lines from the active iTerm2 session
+// Returns raw terminal output - xterm.js handles ANSI codes and formatting
+func (c *Controller) GetSessionContents(lines int) (string, error) {
+	if !c.IsRunning() {
+		return "", fmt.Errorf("iTerm2 is not running")
+	}
+
+	if lines <= 0 {
+		lines = 50
+	}
+
+	script := `
+tell application "iTerm2"
+	tell current session of current window
+		get contents
+	end tell
+end tell
+`
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to get session contents", "error", err)
+		return "", err
+	}
+
+	// Only limit lines, preserve all formatting for xterm.js
+	allLines := strings.Split(output, "\n")
+	if len(allLines) > lines {
+		allLines = allLines[len(allLines)-lines:]
+	}
+
+	return strings.Join(allLines, "\n"), nil
+}
+
+// GetSessionInfo returns information about the active iTerm2 session
+func (c *Controller) GetSessionInfo() (*SessionInfo, error) {
+	if !c.IsRunning() {
+		return nil, fmt.Errorf("iTerm2 is not running")
+	}
+
+	script := `
+tell application "iTerm2"
+	tell current session of current window
+		set sessName to name
+		set profName to profile name
+		set cols to columns
+		set rws to rows
+		set jpid to job pid
+		set isProc to is processing
+		return sessName & "|||" & profName & "|||" & cols & "|||" & rws & "|||" & jpid & "|||" & isProc
+	end tell
+end tell
+`
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to get session info", "error", err)
+		return nil, err
+	}
+
+	parts := strings.Split(output, "|||")
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("unexpected output format: %s", output)
+	}
+
+	cols, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+	rows, _ := strconv.Atoi(strings.TrimSpace(parts[3]))
+	jobPid, _ := strconv.Atoi(strings.TrimSpace(parts[4]))
+	isProcessing := strings.TrimSpace(parts[5]) == "true"
+
+	// Extract current command from session name (usually "command (process)")
+	name := strings.TrimSpace(parts[0])
+	currentCommand := ""
+	if idx := strings.LastIndex(name, " ("); idx > 0 {
+		currentCommand = strings.TrimSuffix(name[idx+2:], ")")
+	}
+
+	return &SessionInfo{
+		Name:           name,
+		ProfileName:    strings.TrimSpace(parts[1]),
+		Columns:        cols,
+		Rows:           rows,
+		CurrentCommand: currentCommand,
+		JobPid:         jobPid,
+		IsProcessing:   isProcessing,
+	}, nil
+}
