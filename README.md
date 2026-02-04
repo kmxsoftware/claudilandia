@@ -2,18 +2,18 @@
 
 A powerful desktop companion app for [Claude Code](https://claude.ai/claude-code) developers. Manage multiple projects, terminals, git operations, Docker containers, and more - all in one place.
 
-Built with [Wails](https://wails.io/) (Go + JavaScript).
+Built with [Wails](https://wails.io/) (Go + JavaScript). **macOS only.**
 
 ## Features
 
 - **Multi-Project Workspace** - Organize and switch between multiple projects with custom colors and icons
-- **Terminal Management** - Multiple terminal tabs per project with full PTY support (xterm.js)
+- **iTerm2 Integration** - Native iTerm2 control via AppleScript - switch tabs, create terminals, send prompts
 - **Claude CLI Integration** - Detects Claude Code CLI status and displays real-time activity
 - **Git Dashboard** - View changed files, diffs, commit history, and branch info
 - **Docker Integration** - Monitor and control containers for your projects
 - **Test Dashboard** - Auto-detect test runs, track results, and monitor coverage trends
 - **Remote Access** - Access your terminals remotely via WebSocket with ngrok tunnel support
-- **Claude Tools Panel** - Manage agents, skills, commands, hooks, and MCP servers
+- **Claude Tools Panel** - Manage agents, skills, commands, hooks, prompts, and MCP servers
 - **Project Notes** - Markdown notes per project
 - **Screenshots** - Capture and manage project screenshots
 
@@ -23,7 +23,15 @@ Built with [Wails](https://wails.io/) (Go + JavaScript).
 
 ## Installation
 
-### macOS
+### Requirements
+
+- **macOS** 12+ (Monterey or later)
+- **iTerm2** installed
+- **Go** 1.24+
+- **Node.js** 18+
+- **Wails CLI** v2.11+
+
+### Build from Source
 
 ```bash
 # Install Xcode Command Line Tools
@@ -48,61 +56,6 @@ wails build
 open build/bin/Claudilandia.app
 ```
 
-### Linux / Ubuntu
-
-```bash
-# Install dependencies
-sudo apt update
-sudo apt install -y golang-go nodejs npm libgtk-3-dev libwebkit2gtk-4.1-dev
-
-# Install Wails CLI
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
-export PATH=$PATH:$(go env GOPATH)/bin
-
-# Clone and build
-git clone https://github.com/kmxsoftware/claudilandia.git
-cd claudilandia
-cd frontend && npm install && cd ..
-wails build
-
-# Run the app
-./build/bin/Claudilandia
-```
-
-### Windows / WSL
-
-**Option 1: Native Windows**
-
-```powershell
-# Install Go from https://go.dev/dl/
-# Install Node.js from https://nodejs.org/
-
-# Install Wails CLI
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-# Clone and build
-git clone https://github.com/kmxsoftware/claudilandia.git
-cd claudilandia
-cd frontend && npm install && cd ..
-wails build
-
-# Run the app
-.\build\bin\Claudilandia.exe
-```
-
-**Option 2: WSL2 (Ubuntu)**
-
-```bash
-# In WSL2, follow Linux/Ubuntu instructions above
-# Note: GUI requires WSLg (Windows 11) or X server (Windows 10)
-```
-
-### Requirements
-
-- **Go** 1.24+
-- **Node.js** 18+
-- **Wails CLI** v2.11+
-
 ## Development
 
 Run in development mode with hot-reload:
@@ -121,7 +74,7 @@ This starts:
 ├── main.go              # Application entry point
 ├── app.go               # Main App struct with all exposed methods
 ├── internal/
-│   ├── terminal/        # PTY terminal management
+│   ├── iterm/           # iTerm2 AppleScript integration
 │   ├── docker/          # Docker API integration
 │   ├── git/             # Git operations
 │   ├── claude/          # Claude CLI detection & tools
@@ -133,7 +86,7 @@ This starts:
 ├── frontend/
 │   ├── src/
 │   │   ├── main.js      # Frontend entry point
-│   │   └── modules/     # Feature modules (terminal, git, docker, etc.)
+│   │   └── modules/     # Feature modules (iterm, git, docker, etc.)
 │   └── package.json
 ├── build/               # Build configuration & output
 └── wails.json           # Wails project configuration
@@ -157,11 +110,7 @@ Security features:
 
 ## Configuration
 
-Application data is stored in:
-- **macOS/Linux**: `~/.claudilandia/`
-- **Windows**: `%USERPROFILE%\.claudilandia\`
-
-This includes:
+Application data is stored in `~/.claudilandia/`:
 - `logs/` - Application logs (3-day retention)
 - Project state and settings
 
@@ -171,15 +120,21 @@ This includes:
 - Go 1.24
 - Wails v2.11
 - gorilla/websocket
-- creack/pty
 - Docker SDK
+- AppleScript (iTerm2 automation)
 
 **Frontend:**
 - Vanilla JavaScript (ES6 modules)
-- xterm.js 6.0
 - Vite 3.0
 - marked (Markdown)
 - highlight.js (syntax highlighting)
+
+## Why macOS Only?
+
+Claudilandia uses native iTerm2 integration via AppleScript for terminal management. This provides:
+- Seamless integration with your existing iTerm2 setup
+- Native performance and reliability
+- Access to iTerm2's powerful features (split panes, profiles, etc.)
 
 ## Contributing
 
