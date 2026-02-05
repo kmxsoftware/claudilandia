@@ -226,6 +226,10 @@ export function GetPackageJSONScripts(arg1) {
   return window['go']['main']['App']['GetPackageJSONScripts'](arg1);
 }
 
+export function GetPomodoroSettings() {
+  return window['go']['main']['App']['GetPomodoroSettings']();
+}
+
 export function GetProject(arg1) {
   return window['go']['main']['App']['GetProject'](arg1);
 }
@@ -504,6 +508,10 @@ export function SaveFileContent(arg1, arg2) {
 
 export function SaveNotes(arg1, arg2) {
   return window['go']['main']['App']['SaveNotes'](arg1, arg2);
+}
+
+export function SavePomodoroSettings(arg1, arg2) {
+  return window['go']['main']['App']['SavePomodoroSettings'](arg1, arg2);
 }
 
 export function SaveScreenshot(arg1, arg2, arg3) {

@@ -122,6 +122,8 @@ export function GetNotes(arg1:string):Promise<string>;
 
 export function GetPackageJSONScripts(arg1:string):Promise<Record<string, string>>;
 
+export function GetPomodoroSettings():Promise<state.PomodoroSettings>;
+
 export function GetProject(arg1:string):Promise<state.ProjectState>;
 
 export function GetProjectAgents(arg1:string):Promise<Array<claude.Agent>>;
@@ -261,6 +263,8 @@ export function SaveCommandContent(arg1:string,arg2:string):Promise<void>;
 export function SaveFileContent(arg1:string,arg2:string):Promise<void>;
 
 export function SaveNotes(arg1:string,arg2:string):Promise<void>;
+
+export function SavePomodoroSettings(arg1:number,arg2:number):Promise<void>;
 
 export function SaveScreenshot(arg1:string,arg2:string,arg3:string):Promise<string>;
 

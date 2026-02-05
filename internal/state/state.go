@@ -41,6 +41,14 @@ type AppState struct {
 	TerminalTheme string `json:"terminalTheme"`
 	// Window state (position, size)
 	Window *WindowState `json:"window"`
+	// Pomodoro timer settings
+	Pomodoro *PomodoroSettings `json:"pomodoro"`
+}
+
+// PomodoroSettings stores the user's pomodoro timer preferences
+type PomodoroSettings struct {
+	SessionMinutes int `json:"sessionMinutes"`
+	BreakMinutes   int `json:"breakMinutes"`
 }
 
 // ProjectState represents a single project with all its state

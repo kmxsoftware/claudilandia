@@ -571,6 +571,25 @@ func (a *App) SetTerminalTheme(themeName string) {
 }
 
 // ============================================
+// Pomodoro Timer Methods
+// ============================================
+
+// GetPomodoroSettings returns the saved pomodoro timer settings
+func (a *App) GetPomodoroSettings() *state.PomodoroSettings {
+	if a.stateManager == nil {
+		return &state.PomodoroSettings{SessionMinutes: 25, BreakMinutes: 5}
+	}
+	return a.stateManager.GetPomodoroSettings()
+}
+
+// SavePomodoroSettings saves the pomodoro timer settings
+func (a *App) SavePomodoroSettings(sessionMinutes, breakMinutes int) {
+	if a.stateManager != nil {
+		a.stateManager.SavePomodoroSettings(sessionMinutes, breakMinutes)
+	}
+}
+
+// ============================================
 // iTerm2 Integration Methods
 // ============================================
 

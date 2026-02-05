@@ -1217,3 +1217,25 @@ func (m *Manager) SetWindowState(state *WindowState) {
 	m.mu.Unlock()
 	m.Save()
 }
+
+// GetPomodoroSettings returns the saved pomodoro timer settings
+func (m *Manager) GetPomodoroSettings() *PomodoroSettings {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.state.Pomodoro == nil {
+		return &PomodoroSettings{SessionMinutes: 25, BreakMinutes: 5}
+	}
+	return m.state.Pomodoro
+}
+
+// SavePomodoroSettings saves the pomodoro timer settings
+func (m *Manager) SavePomodoroSettings(sessionMinutes, breakMinutes int) {
+	m.mu.Lock()
+	m.state.Pomodoro = &PomodoroSettings{
+		SessionMinutes: sessionMinutes,
+		BreakMinutes:   breakMinutes,
+	}
+	m.mu.Unlock()
+	m.Save()
+}

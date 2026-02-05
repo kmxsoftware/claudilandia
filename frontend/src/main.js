@@ -67,6 +67,13 @@ import {
   initNotesHandler
 } from './modules/notes.js';
 
+// Pomodoro module
+import {
+  initPomodoro,
+  setPomodoroCallbacks,
+  renderPomodoro
+} from './modules/pomodoro.js';
+
 // Screenshots module
 import {
   captureScreenshot,
@@ -157,7 +164,9 @@ import {
   CheckProjectCoverage,
   GetTodos,
   SaveTodos,
-  GetGitHistory
+  GetGitHistory,
+  GetPomodoroSettings,
+  SavePomodoroSettings
 } from '../wailsjs/go/main/App';
 import { EventsOn, WindowToggleMaximise } from '../wailsjs/runtime/runtime';
 
@@ -208,6 +217,12 @@ async function init() {
     saveNotes: SaveNotes,
     getNotes: GetNotes,
     insertToTerminal
+  });
+
+  // Setup pomodoro callbacks (init called after render)
+  setPomodoroCallbacks({
+    saveSettings: SavePomodoroSettings,
+    loadSettings: GetPomodoroSettings
   });
 
   // Setup screenshot callbacks
@@ -290,6 +305,9 @@ async function init() {
 
   // Render UI
   render();
+
+  // Initialize pomodoro (after render, NOT project specific)
+  initPomodoro();
 
   // Initialize test dashboard (QA)
   initTestDashboard();
@@ -529,6 +547,9 @@ function render() {
         <div class="sidebar right-sidebar" id="rightSidebar">
           <div class="sidebar-section todo-section" id="todoSidebarSection">
             <!-- Todo section rendered by todo-dashboard.js -->
+          </div>
+          <div class="sidebar-section pomodoro-section" id="pomodoroSection">
+            <!-- Pomodoro timer rendered by pomodoro.js - NOT project specific -->
           </div>
           <div class="sidebar-section notes-section" id="notesSection">
             <!-- Notes section rendered by notes.js -->

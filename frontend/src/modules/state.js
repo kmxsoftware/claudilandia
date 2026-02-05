@@ -64,7 +64,16 @@ export const state = {
     rawLines: []      // Original line content for copying
   },
   // Notes section state
-  notesExpanded: true
+  notesExpanded: true,
+  // Pomodoro timer state
+  pomodoro: {
+    sessionMinutes: 25,    // Default 25 min session
+    breakMinutes: 5,       // Default 5 min break
+    isRunning: false,
+    isBreak: false,
+    timeRemaining: 25 * 60, // Seconds remaining
+    isCompleted: false      // True when timer hits 0, waiting for OK
+  }
 };
 
 // Helper to get current project's terminals

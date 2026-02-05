@@ -687,6 +687,20 @@ export namespace remote {
 
 export namespace state {
 	
+	export class PomodoroSettings {
+	    sessionMinutes: number;
+	    breakMinutes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PomodoroSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionMinutes = source["sessionMinutes"];
+	        this.breakMinutes = source["breakMinutes"];
+	    }
+	}
 	export class WindowState {
 	    x: number;
 	    y: number;
@@ -1074,6 +1088,7 @@ export namespace state {
 	    approvedRemoteClients: ApprovedRemoteClient[];
 	    terminalTheme: string;
 	    window?: WindowState;
+	    pomodoro?: PomodoroSettings;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
@@ -1089,6 +1104,7 @@ export namespace state {
 	        this.approvedRemoteClients = this.convertValues(source["approvedRemoteClients"], ApprovedRemoteClient);
 	        this.terminalTheme = source["terminalTheme"];
 	        this.window = this.convertValues(source["window"], WindowState);
+	        this.pomodoro = this.convertValues(source["pomodoro"], PomodoroSettings);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1109,6 +1125,7 @@ export namespace state {
 		    return a;
 		}
 	}
+	
 	
 	
 	
