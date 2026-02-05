@@ -46,6 +46,42 @@ function formatTime(seconds) {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Play notification sound using Web Audio API
+function playNotificationSound() {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Play a pleasant chime sequence
+    const playTone = (frequency, startTime, duration) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'sine';
+
+      // Fade in and out for smoother sound
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    const now = audioContext.currentTime;
+    // Play a pleasant 3-note chime (C5, E5, G5)
+    playTone(523.25, now, 0.2);        // C5
+    playTone(659.25, now + 0.15, 0.2); // E5
+    playTone(783.99, now + 0.3, 0.3);  // G5
+
+  } catch (err) {
+    console.log('Could not play notification sound:', err);
+  }
+}
+
 // Start the timer
 function startTimer() {
   if (timerInterval) return;
@@ -63,6 +99,7 @@ function startTimer() {
       timerInterval = null;
       state.pomodoro.isRunning = false;
       state.pomodoro.isCompleted = true;
+      playNotificationSound();
       renderPomodoro();
     }
   }, 1000);
