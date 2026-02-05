@@ -3,6 +3,7 @@ package iterm
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -136,16 +137,14 @@ func (c *Controller) GetStatus() (*ITermStatus, error) {
 		return &ITermStatus{Running: false, Tabs: []ITermTab{}}, nil
 	}
 
-	// AppleScript to get all tabs with their info
-	// Session names include process info like "ProjectName 1 (-zsh)", we strip the suffix
-	// Active tab detection uses session ID comparison (more reliable than object comparison)
+	// AppleScript to get all tabs with their info using quote constant to avoid escape issues
 	script := `
+set q to quote
 tell application "iTerm2"
 	set output to "["
 	set isFirst to true
 	repeat with w in windows
 		set windowId to id of w
-		-- Get the current tab's session ID for this window
 		set currentSessId to ""
 		try
 			set currentSessId to id of current session of current tab of w
@@ -157,9 +156,27 @@ tell application "iTerm2"
 			set sess to current session of t
 			set sessName to name of sess
 			set sessId to id of sess
-			-- Strip process suffix like " (-zsh)" or " (node)"
-			set cleanName to my stripProcessSuffix(sessName)
-			-- Compare session IDs to determine if this tab is active
+
+			-- Strip process suffix using offset (avoids text item delimiters issues)
+			set cleanName to sessName
+			try
+				set parenPos to offset of " (" in sessName
+				if parenPos > 0 then
+					set cleanName to text 1 thru (parenPos - 1) of sessName
+				end if
+			end try
+
+			-- Replace quotes with apostrophes for JSON safety
+			set safeName to ""
+			repeat with c in cleanName
+				set c to c as text
+				if c is q then
+					set safeName to safeName & "'"
+				else
+					set safeName to safeName & c
+				end if
+			end repeat
+
 			set isActive to (sessId is currentSessId)
 
 			if not isFirst then
@@ -167,42 +184,12 @@ tell application "iTerm2"
 			end if
 			set isFirst to false
 
-			set output to output & "{\"windowId\":" & windowId & ",\"tabIndex\":" & tabIdx & ",\"name\":\"" & my escapeString(cleanName) & "\",\"isActive\":" & isActive & "}"
+			set output to output & "{" & q & "windowId" & q & ":" & windowId & "," & q & "tabIndex" & q & ":" & tabIdx & "," & q & "name" & q & ":" & q & safeName & q & "," & q & "isActive" & q & ":" & isActive & "}"
 		end repeat
 	end repeat
 	set output to output & "]"
 	return output
 end tell
-
-on stripProcessSuffix(str)
-	-- Remove suffixes like " (-zsh)", " (node)", etc.
-	set AppleScript's text item delimiters to " (-"
-	set parts to text items of str
-	if (count of parts) > 1 then
-		return item 1 of parts
-	end if
-	-- Also try " (" for other formats
-	set AppleScript's text item delimiters to " ("
-	set parts to text items of str
-	if (count of parts) > 1 then
-		return item 1 of parts
-	end if
-	return str
-end stripProcessSuffix
-
-on escapeString(str)
-	set output to ""
-	repeat with c in str
-		if c is "\"" then
-			set output to output & "\\\""
-		else if c is "\\" then
-			set output to output & "\\\\"
-		else
-			set output to output & c
-		end if
-	end repeat
-	return output
-end escapeString
 `
 
 	output, err := c.runAppleScript(script)
@@ -418,7 +405,25 @@ end tell
 }
 
 func (c *Controller) runAppleScript(script string) (string, error) {
-	cmd := exec.Command("osascript", "-e", script)
+	// Write script to temp file to avoid -e escaping issues
+	tmpFile, err := os.CreateTemp("", "applescript-*.scpt")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(script); err != nil {
+		tmpFile.Close()
+		return "", fmt.Errorf("failed to write script: %w", err)
+	}
+	// Ensure data is written to disk before running
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		return "", fmt.Errorf("failed to sync script: %w", err)
+	}
+	tmpFile.Close()
+
+	cmd := exec.Command("osascript", tmpFile.Name())
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -492,9 +497,7 @@ tell application "iTerm2"
 		set profName to profile name
 		set cols to columns
 		set rws to rows
-		set jpid to job pid
-		set isProc to is processing
-		return sessName & "|||" & profName & "|||" & cols & "|||" & rws & "|||" & jpid & "|||" & isProc
+		return sessName & "|||" & profName & "|||" & cols & "|||" & rws
 	end tell
 end tell
 `
@@ -506,14 +509,14 @@ end tell
 	}
 
 	parts := strings.Split(output, "|||")
-	if len(parts) < 6 {
+	if len(parts) < 4 {
 		return nil, fmt.Errorf("unexpected output format: %s", output)
 	}
 
 	cols, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
 	rows, _ := strconv.Atoi(strings.TrimSpace(parts[3]))
-	jobPid, _ := strconv.Atoi(strings.TrimSpace(parts[4]))
-	isProcessing := strings.TrimSpace(parts[5]) == "true"
+	jobPid := 0
+	isProcessing := false
 
 	// Extract current command from session name (usually "command (process)")
 	name := strings.TrimSpace(parts[0])

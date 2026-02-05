@@ -378,9 +378,9 @@ export function renderRemoteAccessPanel() {
   container.innerHTML = `
     <div class="remote-access-content">
       <div class="remote-header">
-        <h3>Remote Terminal Access</h3>
+        <h3>Remote iTerm2 Access</h3>
         <p class="remote-description">
-          Access terminals from your iPhone or any device via browser
+          Control your iTerm2 terminals from iPhone or any device via browser
         </p>
       </div>
 

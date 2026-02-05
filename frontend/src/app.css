@@ -191,11 +191,13 @@ body {
   max-width: 500px;
   border-right: none;
   border-left: 1px solid var(--border);
+  height: 100%;
+  overflow-y: hidden;
 }
 
 /* Todo Section in Right Sidebar */
 .right-sidebar .todo-section {
-  height: 45%;
+  flex: 1;
   min-height: 150px;
   display: flex;
   flex-direction: column;
@@ -205,11 +207,11 @@ body {
 }
 
 .right-sidebar .notes-section {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0;
+  padding: 0 0 16px 0;
 }
 
 .right-sidebar .notes-section .notes-header {

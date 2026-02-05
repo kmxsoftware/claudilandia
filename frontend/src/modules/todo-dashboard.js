@@ -146,41 +146,35 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Render the Todo Dashboard content
+// Render the Todo Dashboard content (in right sidebar)
 export function renderTodoDashboard() {
-  const panel = document.getElementById('dashboardPanel');
-  if (!panel) return;
+  const container = document.getElementById('todoSidebarSection');
+  if (!container) return;
 
   const todos = getCurrentTodos();
   const completedCount = todos.filter(t => t.completed).length;
   const totalCount = todos.length;
 
-  panel.innerHTML = `
-    <div class="dashboard-content">
-      <div class="dashboard-tiles">
-        <div class="dashboard-tile todo-tile">
-          <div class="tile-header">
-            <span class="tile-icon">✅</span>
-            <span class="tile-title">Todo List</span>
-            <span class="tile-count">${completedCount}/${totalCount}</span>
-          </div>
-          <div class="todo-list" id="todoList">
-            ${todos.map(todo => `
-              <div class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}">
-                <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} data-id="${todo.id}">
-                <span class="todo-text" data-id="${todo.id}">${escapeHtml(todo.text)}</span>
-                <div class="todo-actions">
-                  <button class="todo-action-btn todo-copy" data-id="${todo.id}" title="Copy">📋</button>
-                  <button class="todo-action-btn todo-delete" data-id="${todo.id}" title="Delete">🗑️</button>
-                </div>
-              </div>
-            `).join('')}
-            <div class="todo-input-row">
-              <input type="checkbox" class="todo-checkbox placeholder-checkbox" disabled>
-              <input type="text" class="todo-new-input" id="todoNewInput" placeholder="Add todo...">
-            </div>
+  container.innerHTML = `
+    <div class="sidebar-todo-header">
+      <span class="sidebar-todo-icon">✅</span>
+      <span class="sidebar-todo-title">Todo List</span>
+      <span class="sidebar-todo-count">${completedCount}/${totalCount}</span>
+    </div>
+    <div class="sidebar-todo-list" id="todoList">
+      ${todos.map(todo => `
+        <div class="sidebar-todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}">
+          <input type="checkbox" class="sidebar-todo-checkbox" ${todo.completed ? 'checked' : ''} data-id="${todo.id}">
+          <span class="sidebar-todo-text" data-id="${todo.id}">${escapeHtml(todo.text)}</span>
+          <div class="sidebar-todo-actions">
+            <button class="sidebar-todo-btn todo-copy" data-id="${todo.id}" title="Copy">📋</button>
+            <button class="sidebar-todo-btn todo-delete" data-id="${todo.id}" title="Delete">🗑️</button>
           </div>
         </div>
+      `).join('')}
+      <div class="sidebar-todo-input-row">
+        <input type="checkbox" class="sidebar-todo-checkbox placeholder-checkbox" disabled>
+        <input type="text" class="sidebar-todo-input" id="todoNewInput" placeholder="Add todo...">
       </div>
     </div>
   `;
@@ -192,7 +186,7 @@ export function renderTodoDashboard() {
 // Setup event listeners for todo interactions
 function setupTodoEventListeners() {
   // Checkbox toggle
-  document.querySelectorAll('.todo-checkbox:not(.placeholder-checkbox)').forEach(checkbox => {
+  document.querySelectorAll('.sidebar-todo-checkbox:not(.placeholder-checkbox)').forEach(checkbox => {
     checkbox.addEventListener('change', (e) => {
       const id = e.target.dataset.id;
       toggleTodo(id);
@@ -227,7 +221,7 @@ function setupTodoEventListeners() {
   }
 
   // Make todo text editable
-  document.querySelectorAll('.todo-text').forEach(span => {
+  document.querySelectorAll('.sidebar-todo-text').forEach(span => {
     span.addEventListener('dblclick', (e) => {
       const id = e.target.dataset.id;
       const todos = getCurrentTodos();
@@ -236,7 +230,7 @@ function setupTodoEventListeners() {
 
       const input = document.createElement('input');
       input.type = 'text';
-      input.className = 'todo-edit-input';
+      input.className = 'sidebar-todo-edit-input';
       input.value = todo.text;
 
       input.addEventListener('blur', () => {
@@ -264,7 +258,7 @@ function setupTodoEventListeners() {
   });
 }
 
-// Show/hide dashboard panel
+// Show/hide dashboard panel (now shows terminal dashboard in center)
 export function showDashboardPanel(show) {
   const dashboardPanel = document.getElementById('dashboardPanel');
   const browserInnerContent = document.getElementById('browserInnerContent');
@@ -282,9 +276,6 @@ export function showDashboardPanel(show) {
     if (qaPanel) qaPanel.style.display = 'none';
     if (structurePanel) structurePanel.style.display = 'none';
     if (gitPanel) gitPanel.style.display = 'none';
-
-    // Render content
-    renderTodoDashboard();
   }
 }
 
@@ -299,71 +290,43 @@ export function createTodoDashboard() {
   addTodoDashboardStyles();
 }
 
-// Add CSS styles for todo dashboard
+// Add CSS styles for todo sidebar
 function addTodoDashboardStyles() {
   if (document.getElementById('todo-dashboard-styles')) return;
 
   const style = document.createElement('style');
   style.id = 'todo-dashboard-styles';
   style.textContent = `
-    /* Dashboard Panel */
-    .dashboard-panel {
-      background: #0f172a;
-      color: #e2e8f0;
-      overflow-y: auto;
-      flex-direction: column;
-    }
-
-    .dashboard-content {
-      padding: 20px;
-      max-width: 1400px;
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    /* Dashboard Tiles Grid */
-    .dashboard-tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 20px;
-    }
-
-    /* Dashboard Tile */
-    .dashboard-tile {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 16px;
+    /* Sidebar Todo Section */
+    #todoSidebarSection {
       display: flex;
       flex-direction: column;
+      height: 100%;
+      overflow: hidden;
     }
 
-    .dashboard-tile:hover {
-      border-color: #475569;
-    }
-
-    .tile-header {
+    .sidebar-todo-header {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
+      padding: 12px 16px;
       border-bottom: 1px solid #334155;
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    .tile-icon {
-      font-size: 20px;
+    .sidebar-todo-icon {
+      font-size: 16px;
     }
 
-    .tile-title {
-      font-size: 14px;
+    .sidebar-todo-title {
+      font-size: 13px;
       font-weight: 600;
       color: #f1f5f9;
       flex: 1;
     }
 
-    .tile-count {
-      font-size: 12px;
+    .sidebar-todo-count {
+      font-size: 11px;
       color: #64748b;
       background: #334155;
       padding: 2px 8px;
@@ -371,115 +334,136 @@ function addTodoDashboardStyles() {
     }
 
     /* Todo List */
-    .todo-list {
+    .sidebar-todo-list {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      padding: 8px;
+      overflow-y: auto;
+      flex: 1;
     }
 
-    .todo-item {
+    .sidebar-todo-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px;
-      border-radius: 6px;
+      padding: 8px 10px;
+      border-radius: 8px;
       transition: background 0.15s;
     }
 
-    .todo-item:hover {
+    .sidebar-todo-item:hover {
       background: #334155;
     }
 
-    .todo-item.completed .todo-text {
+    .sidebar-todo-item.completed .sidebar-todo-text {
       text-decoration: line-through;
       color: #64748b;
     }
 
-    .todo-checkbox {
-      width: 16px;
-      height: 16px;
+    .sidebar-todo-checkbox {
+      width: 14px;
+      height: 14px;
       cursor: pointer;
       accent-color: #22c55e;
+      flex-shrink: 0;
     }
 
-    .todo-text {
+    .sidebar-todo-text {
       flex: 1;
-      font-size: 13px;
+      font-size: 12px;
       color: #e2e8f0;
       cursor: default;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .todo-actions {
+    .sidebar-todo-actions {
       display: flex;
-      gap: 4px;
+      gap: 2px;
       opacity: 0;
       transition: opacity 0.15s;
     }
 
-    .todo-item:hover .todo-actions {
+    .sidebar-todo-item:hover .sidebar-todo-actions {
       opacity: 1;
     }
 
-    .todo-action-btn {
+    .sidebar-todo-btn {
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       padding: 4px;
       border-radius: 4px;
       transition: background 0.15s;
     }
 
-    .todo-action-btn:hover {
+    .sidebar-todo-btn:hover {
       background: #475569;
     }
 
-    .todo-delete:hover {
+    .sidebar-todo-btn.todo-delete:hover {
       background: #ef444440;
     }
 
     /* Todo Input Row */
-    .todo-input-row {
+    .sidebar-todo-input-row {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px;
+      padding: 8px 10px;
       margin-top: 4px;
       border-top: 1px solid #334155;
     }
 
-    .todo-input-row .placeholder-checkbox {
+    .sidebar-todo-input-row .placeholder-checkbox {
       opacity: 0.3;
     }
 
-    .todo-new-input {
+    .sidebar-todo-input {
       flex: 1;
       background: transparent;
       border: none;
       outline: none;
       color: #e2e8f0;
-      font-size: 13px;
+      font-size: 12px;
       padding: 4px 0;
     }
 
-    .todo-new-input::placeholder {
+    .sidebar-todo-input::placeholder {
       color: #64748b;
     }
 
     /* Inline edit input */
-    .todo-edit-input {
+    .sidebar-todo-edit-input {
       flex: 1;
       background: #334155;
       border: 1px solid #475569;
       border-radius: 4px;
       color: #e2e8f0;
-      font-size: 13px;
+      font-size: 12px;
       padding: 4px 8px;
       outline: none;
     }
 
-    .todo-edit-input:focus {
+    .sidebar-todo-edit-input:focus {
       border-color: #89b4fa;
+    }
+
+    /* Scrollbar */
+    .sidebar-todo-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .sidebar-todo-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar-todo-list::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 2px;
     }
   `;
   document.head.appendChild(style);
@@ -516,10 +500,8 @@ export function initTodoDashboardHandler() {
     },
 
     onAfterSwitch: async (ctx) => {
-      // Refresh dashboard after state is fully loaded
-      if (isDashboardTabActive()) {
-        setTimeout(() => renderTodoDashboard(), 100);
-      }
+      // Always render todos in sidebar after project switch
+      setTimeout(() => renderTodoDashboard(), 100);
     }
   });
 }

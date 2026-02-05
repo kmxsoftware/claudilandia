@@ -4,7 +4,8 @@ import { state } from './state.js';
 import { createModuleLogger } from './logger.js';
 import { normalizeUrl } from './utils.js';
 import { QA_TAB_ID, showQAPanel, updateTestDashboard } from './test-dashboard.js';
-import { DASHBOARD_TAB_ID, showDashboardPanel, renderTodoDashboard } from './todo-dashboard.js';
+import { DASHBOARD_TAB_ID, showDashboardPanel } from './todo-dashboard.js';
+import { renderTerminalDashboard, showTerminalDashboard } from './terminal-dashboard.js';
 import { STRUCTURE_TAB_ID, showStructurePanel, switchToStructureTab } from './structure-panel.jsx';
 import { GIT_TAB_ID, showGitPanel, loadGitHistory } from './git-dashboard.js';
 import { registerStateHandler } from './project-switcher.js';
@@ -97,7 +98,7 @@ export function renderBrowserTabs() {
   });
 }
 
-// Switch to the Dashboard tab (Todo List)
+// Switch to the Dashboard tab (Terminal Dashboard)
 export function switchToDashboardTab() {
   state.browser.activeTabId = DASHBOARD_TAB_ID;
 
@@ -108,9 +109,10 @@ export function switchToDashboardTab() {
   showRemotePanel(false);
   hideRemoteAccessPanel();
 
-  // Show dashboard panel and render content
+  // Show dashboard panel and render terminal dashboard
   showDashboardPanel(true);
-  renderTodoDashboard();
+  showTerminalDashboard();
+  renderTerminalDashboard();
 
   // Update tabs UI
   renderBrowserTabs();

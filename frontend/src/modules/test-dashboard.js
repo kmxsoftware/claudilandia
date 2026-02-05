@@ -204,7 +204,7 @@ async function loadPackageScripts() {
       projectScripts.set(state.activeProject.path, scripts);
     }
   } catch (err) {
-    console.error('Failed to load package.json scripts:', err);
+    // Silently ignore - project may not have package.json
   }
 }
 

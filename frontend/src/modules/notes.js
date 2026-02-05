@@ -17,7 +17,11 @@ export function setNotesCallbacks(callbacks) {
 // Render notes section in sidebar
 export function renderNotesSection() {
   const notesSection = document.getElementById('notesSection');
-  if (!notesSection) return;
+  console.log('[Notes] renderNotesSection called, element:', notesSection, 'activeProject:', state.activeProject?.name);
+  if (!notesSection) {
+    console.log('[Notes] notesSection element not found!');
+    return;
+  }
 
   const notes = state.activeProject?.notes || '';
   const preview = notes ? notes.split('\n')[0].substring(0, 50) : 'No notes yet';
@@ -26,8 +30,7 @@ export function renderNotesSection() {
   notesSection.innerHTML = `
     <div class="notes-header" id="notesHeader">
       <span class="notes-toggle">${state.notesExpanded ? '▼' : '▶'}</span>
-      <h3>Notes</h3>
-      <span class="notes-icon">${hasNotes ? '📝' : '📄'}</span>
+      <h3>📝 Notes</h3>
     </div>
     <div id="notesContent" class="notes-content ${state.notesExpanded ? '' : 'collapsed'}">
       <div class="notes-preview ${hasNotes ? '' : 'empty'}" id="notesPreview">${hasNotes ? escapeHtml(preview) + (notes.length > 50 ? '...' : '') : 'Click to add notes...'}</div>
@@ -38,6 +41,7 @@ export function renderNotesSection() {
       </div>
     </div>
   `;
+  console.log('[Notes] Section rendered successfully');
 
   setupNotesEventListeners();
 }
