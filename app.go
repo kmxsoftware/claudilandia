@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,13 +114,55 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize test scanner
 	a.testScanner = testing.NewTestScanner()
 
-	// Initialize iTerm2 controller
+	// Initialize iTerm2 controller (no polling - sync on demand only)
 	a.itermController = iterm.NewController()
-	a.itermController.SetStatusChangeHandler(func(status *iterm.ITermStatus) {
-		runtime.EventsEmit(a.ctx, "iterm-status-changed", status)
-	})
-	a.itermController.StartPolling(2 * time.Second)
 	logging.Info("iTerm2 controller initialized")
+
+	// Attempt to initialize Python bridge for styled terminal content (non-blocking)
+	go func() {
+		execPath, _ := os.Executable()
+		baseDir := filepath.Dir(execPath)
+		logging.Info("Python bridge: executable dir", "baseDir", baseDir)
+
+		// Candidate directories to search for scripts/
+		candidates := []string{
+			// macOS .app bundle: binary is at X.app/Contents/MacOS/Binary
+			// project root is 5 levels up: MacOS -> Contents -> X.app -> bin -> build -> project
+			filepath.Join(baseDir, "..", "..", "..", "..", "..", "scripts"),
+			// Development: binary in build/bin/, project root is 2 up
+			filepath.Join(baseDir, "..", "..", "scripts"),
+			// Next to binary
+			filepath.Join(baseDir, "scripts"),
+		}
+
+		var scriptPath, pythonPath string
+		for _, dir := range candidates {
+			sp := filepath.Join(dir, "iterm2_bridge.py")
+			pp := filepath.Join(dir, "venv", "bin", "python3")
+			logging.Info("Python bridge: trying", "script", sp, "python", pp)
+			if _, err := os.Stat(sp); err == nil {
+				if _, err := os.Stat(pp); err == nil {
+					scriptPath = sp
+					pythonPath = pp
+					logging.Info("Python bridge: found at", "script", scriptPath)
+					break
+				} else {
+					logging.Info("Python bridge: venv not found", "path", pp, "error", err)
+				}
+			} else {
+				logging.Info("Python bridge: script not found", "path", sp)
+			}
+		}
+
+		if scriptPath == "" {
+			logging.Info("Python bridge script/venv not found, styled output unavailable")
+			return
+		}
+
+		if err := a.itermController.InitPythonBridge(scriptPath, pythonPath); err != nil {
+			logging.Info("Styled terminal output unavailable", "error", err)
+		}
+	}()
 
 	// Start coverage polling in background (check every 5 seconds)
 	a.coverageStopChan = make(chan struct{})
@@ -142,8 +185,10 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.coverageStopChan != nil {
 		close(a.coverageStopChan)
 	}
-	// Stop iTerm2 polling
+	// Stop iTerm2 polling, content watching, and Python bridge
 	if a.itermController != nil {
+		a.itermController.StopStyledContentWatching()
+		a.itermController.StopPythonBridge()
 		a.itermController.StopPolling()
 	}
 	if a.terminalManager != nil {
@@ -621,12 +666,28 @@ func (a *App) SwitchITermTab(windowID, tabIndex int) error {
 	return a.itermController.SwitchTab(windowID, tabIndex)
 }
 
+// SwitchITermTabBySessionID switches to a tab by its session ID (more reliable)
+func (a *App) SwitchITermTabBySessionID(sessionID string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.SwitchTabBySessionID(sessionID)
+}
+
 // RenameITermTab renames an iTerm2 tab
 func (a *App) RenameITermTab(windowID, tabIndex int, newName string) error {
 	if a.itermController == nil {
 		return fmt.Errorf("iTerm controller not initialized")
 	}
 	return a.itermController.RenameTab(windowID, tabIndex, newName)
+}
+
+// RenameITermTabBySessionID renames an iTerm2 tab by session ID
+func (a *App) RenameITermTabBySessionID(sessionID, newName string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.RenameTabBySessionID(sessionID, newName)
 }
 
 // CreateITermTab creates a new tab in iTerm2 at the specified directory with a name
@@ -675,6 +736,90 @@ func (a *App) GetITermSessionInfo() (*iterm.SessionInfo, error) {
 		return nil, fmt.Errorf("iTerm controller not initialized")
 	}
 	return a.itermController.GetSessionInfo()
+}
+
+// GetITermSessionContentsByID returns the last N lines from a specific iTerm2 session
+func (a *App) GetITermSessionContentsByID(sessionID string, lines int) (string, error) {
+	if a.itermController == nil {
+		return "", fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.GetSessionContentsByID(sessionID, lines)
+}
+
+// WriteITermTextBySessionID writes text to a specific iTerm2 session
+func (a *App) WriteITermTextBySessionID(sessionID string, text string, pressEnter bool) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.WriteTextBySessionID(sessionID, text, pressEnter)
+}
+
+// SendITermSpecialKey sends a special key sequence to a specific iTerm2 session
+func (a *App) SendITermSpecialKey(sessionID string, key string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.SendSpecialKeyBySessionID(sessionID, key)
+}
+
+// WatchITermSession starts watching a session's styled content via Python bridge.
+// Returns an error string if the bridge is not available.
+func (a *App) WatchITermSession(sessionID string) string {
+	logging.Info("WatchITermSession called", "sessionId", sessionID)
+	if a.itermController == nil {
+		return "ERROR: iTerm controller not initialized"
+	}
+
+	err := a.itermController.StartStyledContentWatching(
+		sessionID,
+		func(content *iterm.StyledContent) {
+			linesJSON, err := json.Marshal(content.Lines)
+			if err != nil {
+				logging.Error("Failed to marshal styled lines", "error", err)
+				return
+			}
+			runtime.EventsEmit(a.ctx, "iterm-session-styled-content", map[string]interface{}{
+				"sessionId": content.SessionID,
+				"lines":     string(linesJSON),
+				"cursor":    map[string]interface{}{"x": content.Cursor.X, "y": content.Cursor.Y},
+				"cols":      content.Cols,
+				"rows":      content.Rows,
+			})
+		},
+		func(profile *iterm.ProfileData) {
+			runtime.EventsEmit(a.ctx, "iterm-session-profile", map[string]interface{}{
+				"sessionId": profile.SessionID,
+				"colors": map[string]interface{}{
+					"fg":     profile.Colors.Fg,
+					"bg":     profile.Colors.Bg,
+					"cursor": profile.Colors.Cursor,
+					"ansi":   profile.Colors.Ansi,
+				},
+			})
+		},
+	)
+
+	if err != nil {
+		logging.Warn("WatchITermSession failed", "error", err)
+		return "ERROR: " + err.Error()
+	}
+	return ""
+}
+
+// UnwatchITermSession stops watching any session content
+func (a *App) UnwatchITermSession() {
+	if a.itermController == nil {
+		return
+	}
+	a.itermController.StopStyledContentWatching()
+}
+
+// IsBridgeAvailable returns whether styled terminal rendering is available
+func (a *App) IsBridgeAvailable() bool {
+	if a.itermController == nil {
+		return false
+	}
+	return a.itermController.IsBridgeAvailable()
 }
 
 // ============================================

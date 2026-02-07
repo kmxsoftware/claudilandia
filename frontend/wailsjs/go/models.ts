@@ -355,7 +355,9 @@ export namespace iterm {
 	export class ITermTab {
 	    windowId: number;
 	    tabIndex: number;
+	    sessionId: string;
 	    name: string;
+	    path: string;
 	    isActive: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -366,7 +368,9 @@ export namespace iterm {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.windowId = source["windowId"];
 	        this.tabIndex = source["tabIndex"];
+	        this.sessionId = source["sessionId"];
 	        this.name = source["name"];
+	        this.path = source["path"];
 	        this.isActive = source["isActive"];
 	    }
 	}

@@ -5,7 +5,7 @@ import { createModuleLogger } from './logger.js';
 import { normalizeUrl } from './utils.js';
 import { QA_TAB_ID, showQAPanel, updateTestDashboard } from './test-dashboard.js';
 import { DASHBOARD_TAB_ID, showDashboardPanel } from './todo-dashboard.js';
-import { renderTerminalDashboard, showTerminalDashboard } from './terminal-dashboard.js';
+import { renderTerminalDashboard, showTerminalDashboard, stopViewing } from './terminal-dashboard.js';
 import { STRUCTURE_TAB_ID, showStructurePanel, switchToStructureTab } from './structure-panel.jsx';
 import { GIT_TAB_ID, showGitPanel, loadGitHistory } from './git-dashboard.js';
 import { registerStateHandler } from './project-switcher.js';
@@ -123,6 +123,9 @@ export function switchToDashboardTab() {
 export function switchToGitTab() {
   state.browser.activeTabId = GIT_TAB_ID;
 
+  // Stop watching terminal output when leaving dashboard
+  stopViewing();
+
   // Hide other panels
   showDashboardPanel(false);
   showQAPanel(false);
@@ -141,6 +144,9 @@ export function switchToGitTab() {
 // Switch to the QA tab (Tests)
 export function switchToQATab() {
   state.browser.activeTabId = QA_TAB_ID;
+
+  // Stop watching terminal output when leaving dashboard
+  stopViewing();
 
   // Hide other panels
   showDashboardPanel(false);
@@ -162,6 +168,9 @@ export function switchToQATab() {
 function switchToStructureTabLocal() {
   state.browser.activeTabId = STRUCTURE_TAB_ID;
 
+  // Stop watching terminal output when leaving dashboard
+  stopViewing();
+
   // Hide other panels
   showDashboardPanel(false);
   showGitPanel(false);
@@ -180,6 +189,9 @@ function switchToStructureTabLocal() {
 // Switch to the Remote tab (Remote Access from iPhone)
 export function switchToRemoteTab() {
   state.browser.activeTabId = REMOTE_TAB_ID;
+
+  // Stop watching terminal output when leaving dashboard
+  stopViewing();
 
   // Hide other panels
   showDashboardPanel(false);

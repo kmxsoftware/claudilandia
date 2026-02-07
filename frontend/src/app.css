@@ -6085,13 +6085,7 @@ body {
   flex-shrink: 0;
 }
 
-/* Sidebar iTerm panel - tab buttons */
-.iterm-panel-sidebar {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
+/* Sidebar iTerm panel - simple tab buttons */
 .iterm-tabs-row {
   display: flex;
   flex-wrap: wrap;
@@ -6099,49 +6093,21 @@ body {
 }
 
 .iterm-tab-btn {
-  padding: 4px 10px;
-  font-size: 11px;
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
-}
-
-.iterm-tab-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .iterm-tab-btn.active {
-  background: var(--success-hover, #16a34a);
-  color: white;
-}
-
-.iterm-tab-btn.active:hover {
-  background: var(--success);
-}
-
-.iterm-tab-btn.add {
-  background: var(--accent);
-  color: white;
-  font-weight: 600;
-  min-width: 28px;
-}
-
-.iterm-tab-btn.add:hover {
-  background: var(--accent-hover);
-}
-
-.iterm-tab-btn.launch {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  width: 100%;
-}
-
-.iterm-tab-btn.launch:hover {
-  background: var(--accent);
+  background: #16a34a;
   color: white;
 }
 

@@ -1,48 +1,86 @@
-// Terminal Dashboard - iTerm2 monitoring and Git status tracking
+// Terminal Dashboard - iTerm2 monitoring with inline output viewer
 
 import { state } from './state.js';
 import { registerStateHandler } from './project-switcher.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTab, CreateITermTab, RenameITermTab, GetGitStatus, GetGitHistory, GetGitCurrentBranch } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
 let dashboardState = {
-  sessionInfo: null,
   itermStatus: null,
-  gitStatus: null,
-  gitHistory: null,
-  gitBranch: null,
   lastUpdate: null,
-  pollInterval: null,
-  activeTermTab: 'project' // 'project' or 'all'
+  selectedProjectName: null, // project selected on the left
+  viewingSessionId: null,    // terminal being viewed on the right
+  sessionContents: '',       // output text (plain fallback)
+  styledLines: null,         // styled line data (array of arrays of runs)
+  cursorPos: null,           // {x, y}
+  termSize: null,            // {cols, rows}
+  profileColors: null,       // {fg, bg, cursor, ansi: [...]}
+  useStyledMode: false,      // whether styled content is active
 };
 
-// Get current project name
-function getActiveProjectName() {
-  return state.activeProject?.name || '';
-}
+// ============================================
+// Helpers
+// ============================================
 
-// Get current project path
-function getActiveProjectPath() {
-  return state.activeProject?.path || '';
-}
+// Stores sessionId → projectName for tabs WE created
+const tabProjectMap = {};
 
-// Filter tabs for current project
-function getProjectTabs(allTabs) {
-  const projectName = getActiveProjectName();
+// Get tabs matching a project name
+function getTabsForProject(allTabs, projectName, projectPath) {
   if (!projectName) return [];
-  return allTabs.filter(tab => tab.name.startsWith(projectName + ' ') || tab.name === projectName);
+  return allTabs.filter(tab => {
+    // Match by our own mapping (most reliable - tabs we created)
+    if (tabProjectMap[tab.sessionId] === projectName) return true;
+    // Match by name
+    if (tab.name === projectName || tab.name.startsWith(projectName + ' ')) return true;
+    // Match by exact working directory path
+    if (projectPath && tab.path && tab.path === projectPath) return true;
+    return false;
+  });
 }
 
-// Get next tab number for project
-function getNextTabNumber(allTabs) {
-  const projectName = getActiveProjectName();
-  if (!projectName) return 1;
+// Build project groups from all iTerm tabs + Claudilandia projects
+function buildProjectGroups(allTabs) {
+  const groups = []; // { name, path, tabs[], icon, color }
+  const matched = new Set();
 
+  // Show ALL Claudilandia projects (same order as top tabs)
+  const projects = state.projects || [];
+  for (const proj of projects) {
+    const tabs = getTabsForProject(allTabs.filter(t => !matched.has(t.sessionId)), proj.name, proj.path);
+    tabs.forEach(t => matched.add(t.sessionId));
+    groups.push({
+      name: proj.name,
+      path: proj.path,
+      icon: proj.icon || '',
+      color: proj.color || '',
+      tabs,
+    });
+  }
+
+  // Collect unmatched tabs under "Other"
+  const otherTabs = allTabs.filter(t => !matched.has(t.sessionId));
+  if (otherTabs.length > 0) {
+    groups.push({
+      name: 'Other',
+      path: '',
+      icon: '',
+      color: '',
+      tabs: otherTabs,
+    });
+  }
+
+  return groups;
+}
+
+// Get next tab number for a project
+function getNextTabNumber(allTabs, projectName) {
+  if (!projectName) return 1;
   const projectTabs = allTabs.filter(tab => tab.name.startsWith(projectName + ' '));
   let maxNum = 0;
   projectTabs.forEach(tab => {
-    const match = tab.name.match(new RegExp(`^${projectName} (\\d+)$`));
+    const match = tab.name.match(new RegExp(`^${escapeRegex(projectName)} (\\d+)$`));
     if (match) {
       const num = parseInt(match[1], 10);
       if (num > maxNum) maxNum = num;
@@ -51,615 +89,566 @@ function getNextTabNumber(allTabs) {
   return maxNum + 1;
 }
 
-// Global functions for onclick handlers
-window.setTerminalTab = function(tab) {
-  dashboardState.activeTermTab = tab;
-  renderTerminalDashboard();
-};
-
-window.itermSwitchTab = async function(windowId, tabIndex) {
-  try {
-    await SwitchITermTab(windowId, tabIndex);
-    // Update local state
-    if (dashboardState.itermStatus?.tabs) {
-      dashboardState.itermStatus.tabs.forEach(tab => {
-        tab.isActive = (tab.windowId === windowId && tab.tabIndex === tabIndex);
-      });
-      renderTerminalDashboard();
-    }
-  } catch (err) {
-    console.error('Failed to switch tab:', err);
-  }
-};
-
-window.itermCreateTab = async function() {
-  const projectPath = getActiveProjectPath();
-  const projectName = getActiveProjectName();
-  if (!projectPath || !projectName) return;
-
-  const allTabs = dashboardState.itermStatus?.tabs || [];
-  const tabNumber = getNextTabNumber(allTabs);
-  const tabName = `${projectName} ${tabNumber}`;
-
-  try {
-    await CreateITermTab(projectPath, tabName);
-    setTimeout(() => refreshDashboardData(), 500);
-  } catch (err) {
-    console.error('Failed to create tab:', err);
-  }
-};
-
-window.itermRenameTab = async function(windowId, tabIndex, currentName) {
-  const newName = prompt('Rename terminal:', currentName);
-  if (newName && newName !== currentName) {
-    try {
-      await RenameITermTab(windowId, tabIndex, newName);
-      setTimeout(() => refreshDashboardData(), 300);
-    } catch (err) {
-      console.error('Failed to rename tab:', err);
-    }
-  }
-};
-
-// Initialize terminal dashboard
-export function initTerminalDashboard() {
-  addTerminalDashboardStyles();
-
-  // Listen for iTerm status changes
-  EventsOn('iterm-status-changed', (status) => {
-    dashboardState.itermStatus = status;
-    if (isDashboardVisible()) {
-      renderTerminalDashboard();
-    }
-  });
-
-  // Delay polling start to let Wails bindings register (fixes hot reload errors)
-  setTimeout(() => startPolling(), 500);
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Start polling for terminal data
-function startPolling() {
-  if (dashboardState.pollInterval) return;
-
-  dashboardState.pollInterval = setInterval(async () => {
-    if (isDashboardVisible()) {
-      await refreshDashboardData();
-    }
-  }, 2000); // Poll every 2 seconds
-}
-
-// Stop polling
-function stopPolling() {
-  if (dashboardState.pollInterval) {
-    clearInterval(dashboardState.pollInterval);
-    dashboardState.pollInterval = null;
-  }
-}
-
-// Check if dashboard is visible
-function isDashboardVisible() {
-  const panel = document.getElementById('dashboardPanel');
-  return panel && panel.style.display !== 'none';
-}
-
-// Refresh dashboard data from iTerm2 and Git
-async function refreshDashboardData() {
-  const projectPath = getActiveProjectPath();
-
-  // Fetch iTerm status first (fast) and render immediately
-  try {
-    const status = await GetITermStatus();
-    dashboardState.itermStatus = status;
-    if (status?.running) {
-      try {
-        dashboardState.sessionInfo = await GetITermSessionInfo();
-      } catch (e) {
-        // Ignore session info errors
-      }
-    } else {
-      dashboardState.sessionInfo = null;
-    }
-  } catch (err) {
-    // Ignore iTerm errors (including binding registration during hot reload)
-  }
-
-  // Render immediately with whatever data we have
-  dashboardState.lastUpdate = new Date();
-  renderTerminalDashboard();
-
-  // Fetch Git data in background (slower) and update when ready
-  if (projectPath) {
-    fetchGitDataInBackground(projectPath);
-  }
-}
-
-// Fetch git data without blocking
-async function fetchGitDataInBackground(projectPath) {
-  try {
-    const [gitStatus, gitBranch, gitHistory] = await Promise.all([
-      GetGitStatus(projectPath),
-      GetGitCurrentBranch(projectPath),
-      GetGitHistory(projectPath, 50)
-    ]);
-
-    // Only update if we're still on the same project
-    if (getActiveProjectPath() === projectPath) {
-      dashboardState.gitStatus = gitStatus;
-      dashboardState.gitBranch = gitBranch;
-      dashboardState.gitHistory = gitHistory;
-      renderTerminalDashboard();
-    }
-  } catch (err) {
-    // Silently ignore git errors
-  }
-}
-
-// Build activity data from git history (last 12 weeks, aligned to calendar weeks)
-function buildActivityData(history) {
-  if (!history || history.length === 0) return { weeks: [], months: [] };
-
-  const weeksCount = 12;
-  const now = new Date();
-
-  // Find the end of current week (Saturday)
-  const endDate = new Date(now);
-  endDate.setDate(endDate.getDate() + (6 - endDate.getDay())); // Go to Saturday
-  endDate.setHours(23, 59, 59, 999);
-
-  // Find start of the period (Sunday, 12 weeks ago)
-  const startDate = new Date(endDate);
-  startDate.setDate(startDate.getDate() - (weeksCount * 7) + 1);
-  startDate.setHours(0, 0, 0, 0);
-
-  // Build commit count map
-  const commitMap = new Map();
-  history.forEach(commit => {
-    if (commit.date) {
-      const key = commit.date.split('T')[0];
-      commitMap.set(key, (commitMap.get(key) || 0) + 1);
-    }
-  });
-
-  // Build weeks array (each week is Sun-Sat, displayed as column)
-  const weeks = [];
-  const currentDate = new Date(startDate);
-
-  for (let w = 0; w < weeksCount; w++) {
-    const week = [];
-    for (let d = 0; d < 7; d++) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      const isFuture = currentDate > now;
-      week.push({
-        date: dateStr,
-        count: isFuture ? -1 : (commitMap.get(dateStr) || 0), // -1 for future days
-        dateObj: new Date(currentDate)
-      });
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-
-  // Build month labels - show at first week where month appears
-  const months = [];
-  let lastMonth = -1;
-  weeks.forEach((week, weekIndex) => {
-    // Check each day in the week for month boundary
-    for (const day of week) {
-      const month = day.dateObj.getMonth();
-      if (month !== lastMonth) {
-        // Only add if this is a new month
-        months.push({
-          weekIndex,
-          label: day.dateObj.toLocaleDateString('en', { month: 'short' })
-        });
-        lastMonth = month;
-        break; // Only one label per week max
-      }
-    }
-  });
-
-  return { weeks, months };
-}
-
-// Get commits this week
-function getCommitsThisWeek(history) {
-  if (!history) return 0;
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  return history.filter(c => c.date && new Date(c.date) >= startOfWeek).length;
-}
-
-// Get last commit info
-function getLastCommit(history) {
-  if (!history || history.length === 0) return null;
-  return history[0]; // Assuming sorted by date desc
-}
-
-// Format relative time
-function formatRelativeTime(dateStr) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-}
-
-// Get activity level (0-4) for styling, -1 for future days
-function getActivityLevel(count) {
-  if (count < 0) return 'future'; // Future days
-  if (count === 0) return 0;
-  if (count <= 2) return 1;
-  if (count <= 5) return 2;
-  if (count <= 10) return 3;
-  return 4;
-}
-
-// Escape HTML
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// Format time ago
-function formatTimeAgo(date) {
-  if (!date) return '';
-  const seconds = Math.floor((new Date() - date) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
+// ============================================
+// Window handlers
+// ============================================
+
+// Select a project on the left
+window.itermSelectProject = function(projectName) {
+  if (dashboardState.selectedProjectName === projectName) return;
+  stopViewing();
+  dashboardState.selectedProjectName = projectName;
+  renderTerminalDashboard();
+};
+
+// Select a terminal tab on the right (starts viewing)
+window.itermSelectTerminal = async function(sessionId) {
+  if (dashboardState.viewingSessionId === sessionId) return;
+  stopViewing();
+
+  dashboardState.viewingSessionId = sessionId;
+  dashboardState.sessionContents = 'Loading...';
+  renderTerminalDashboard();
+
+  try {
+    const result = await WatchITermSession(sessionId);
+    if (result && result.startsWith('ERROR:')) {
+      dashboardState.sessionContents = result;
+      dashboardState.useStyledMode = false;
+      renderTerminalDashboard();
+      return;
+    }
+  } catch (err) {
+    dashboardState.sessionContents = 'ERROR: ' + (err.message || err);
+    dashboardState.useStyledMode = false;
+    renderTerminalDashboard();
+    return;
+  }
+};
+
+// Focus iTerm2 on a specific session
+window.itermFocusSession = async function(sessionId) {
+  try {
+    await SwitchITermTabBySessionID(sessionId);
+  } catch (err) {
+    console.error('Failed to focus session:', err);
+  }
+};
+
+// Rename terminal (double-click on tab)
+window.itermRenameTab = async function(sessionId, currentName) {
+  const newName = prompt('Rename terminal:', currentName);
+  if (newName && newName !== currentName) {
+    try {
+      await RenameITermTabBySessionID(sessionId, newName);
+      const tab = dashboardState.itermStatus?.tabs?.find(t => t.sessionId === sessionId);
+      if (tab) {
+        tab.name = newName;
+        renderTerminalDashboard();
+      }
+    } catch (err) {
+      console.error('Failed to rename tab:', err);
+    }
+  }
+};
+
+// Create new terminal for the selected project
+window.itermCreateTab = async function() {
+  const projectName = dashboardState.selectedProjectName;
+  if (!projectName || projectName === 'Other') return;
+
+  const proj = (state.projects || []).find(p => p.name === projectName);
+  if (!proj) return;
+
+  const allTabs = dashboardState.itermStatus?.tabs || [];
+  const previousSessionIds = new Set(allTabs.map(t => t.sessionId));
+  const tabNumber = getNextTabNumber(allTabs, projectName);
+  const tabName = `${projectName} ${tabNumber}`;
+
+  try {
+    await CreateITermTab(proj.path, tabName);
+
+    // Wait for iTerm2 to create the session, then find it
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise(r => setTimeout(r, 500));
+      const status = await GetITermStatus();
+      dashboardState.itermStatus = status;
+      const newTab = (status?.tabs || []).find(t => !previousSessionIds.has(t.sessionId));
+      if (newTab) {
+        tabProjectMap[newTab.sessionId] = projectName;
+        renderTerminalDashboard();
+        window.itermSelectTerminal(newTab.sessionId);
+        return;
+      }
+    }
+    // Tab not found after retries - just refresh to show whatever state we have
+    renderTerminalDashboard();
+  } catch (err) {
+    console.error('Failed to create terminal:', err);
+  }
+};
+
+window.itermRefreshDashboard = function() {
+  refreshDashboardData();
+};
+
+// Send command to viewed session
+window.itermSendCommand = async function() {
+  const input = document.getElementById('itermCommandInput');
+  if (!input || !dashboardState.viewingSessionId) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+
+  try {
+    await WriteITermTextBySessionID(dashboardState.viewingSessionId, text, true);
+    input.value = '';
+  } catch (err) {
+    console.error('Failed to send command:', err);
+  }
+};
+
+window.itermSendKey = async function(key) {
+  if (!dashboardState.viewingSessionId) return;
+  try {
+    await SendITermSpecialKey(dashboardState.viewingSessionId, key);
+  } catch (err) {
+    console.error('Failed to send key:', err);
+  }
+};
+
+window.itermStopViewing = function() {
+  stopViewing();
+  renderTerminalDashboard();
+};
+
+// ============================================
+// Core logic
+// ============================================
+
+export function stopViewing() {
+  if (!dashboardState.viewingSessionId) return;
+  dashboardState.viewingSessionId = null;
+  dashboardState.sessionContents = '';
+  dashboardState.styledLines = null;
+  dashboardState.cursorPos = null;
+  dashboardState.termSize = null;
+  dashboardState.profileColors = null;
+  dashboardState.useStyledMode = false;
+  try {
+    UnwatchITermSession();
+  } catch (err) {
+    // Ignore
+  }
 }
 
-// Render the terminal dashboard
+export function initTerminalDashboard() {
+  addTerminalDashboardStyles();
+
+  EventsOn('iterm-status-changed', (status) => {
+    dashboardState.itermStatus = status;
+    if (dashboardState.viewingSessionId && status?.tabs) {
+      const stillExists = status.tabs.some(t => t.sessionId === dashboardState.viewingSessionId);
+      if (!stillExists) {
+        stopViewing();
+      }
+    }
+    if (isDashboardVisible()) {
+      renderTerminalDashboard();
+    }
+  });
+
+  EventsOn('iterm-session-styled-content', (data) => {
+    if (!data || data.sessionId !== dashboardState.viewingSessionId) return;
+    try {
+      dashboardState.styledLines = typeof data.lines === 'string' ? JSON.parse(data.lines) : data.lines;
+      dashboardState.cursorPos = data.cursor;
+      dashboardState.termSize = { cols: data.cols, rows: data.rows };
+      dashboardState.useStyledMode = true;
+      updateStyledOutputViewer();
+    } catch (e) {
+      console.error('Failed to parse styled content:', e);
+    }
+  });
+
+  EventsOn('iterm-session-profile', (data) => {
+    if (!data || data.sessionId !== dashboardState.viewingSessionId) return;
+    dashboardState.profileColors = data.colors;
+    applyProfileColors();
+    if (dashboardState.styledLines) {
+      updateStyledOutputViewer();
+    }
+  });
+
+  setTimeout(() => refreshDashboardData(), 500);
+}
+
+function isDashboardVisible() {
+  const panel = document.getElementById('dashboardPanel');
+  return panel && panel.style.display !== 'none';
+}
+
+async function refreshDashboardData() {
+  try {
+    const status = await GetITermStatus();
+    dashboardState.itermStatus = status;
+  } catch (err) {
+    // Ignore
+  }
+
+  dashboardState.lastUpdate = new Date();
+  renderTerminalDashboard();
+}
+
+function updateStyledOutputViewer() {
+  const viewer = document.getElementById('itermOutputViewer');
+  if (!viewer) return;
+
+  // Update bridge indicator to green
+  const indicator = document.querySelector('.bridge-indicator');
+  if (indicator && !indicator.classList.contains('active')) {
+    indicator.classList.add('active');
+    indicator.title = 'Python bridge (styled)';
+  }
+
+  const lines = dashboardState.styledLines;
+  if (!lines) {
+    viewer.textContent = '';
+    return;
+  }
+
+  const wasAtBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 30;
+  const defaultFg = dashboardState.profileColors?.fg || '#c7c7c7';
+  const defaultBg = dashboardState.profileColors?.bg || '#000000';
+
+  const fragment = document.createDocumentFragment();
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const lineRuns = lines[lineIdx];
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'term-line';
+
+    if (!lineRuns || lineRuns.length === 0) {
+      lineDiv.textContent = '\u00A0';
+      fragment.appendChild(lineDiv);
+      continue;
+    }
+
+    for (const run of lineRuns) {
+      const span = document.createElement('span');
+      let style = '';
+
+      if (run.inv) {
+        // Inverse: swap fg/bg
+        const fg = run.fg || defaultFg;
+        const bg = run.bg || defaultBg;
+        style += `color:${bg};background-color:${fg};`;
+      } else {
+        if (run.fg) style += `color:${run.fg};`;
+        if (run.bg) style += `background-color:${run.bg};`;
+      }
+
+      if (run.b) style += 'font-weight:bold;';
+      if (run.i) style += 'font-style:italic;';
+      if (run.u && run.s) {
+        style += 'text-decoration:underline line-through;';
+      } else if (run.u) {
+        style += 'text-decoration:underline;';
+      } else if (run.s) {
+        style += 'text-decoration:line-through;';
+      }
+      if (run.f) style += 'opacity:0.5;';
+
+      if (style) span.setAttribute('style', style);
+      span.textContent = run.t;
+      lineDiv.appendChild(span);
+    }
+
+    fragment.appendChild(lineDiv);
+  }
+
+  viewer.innerHTML = '';
+  viewer.appendChild(fragment);
+
+  if (wasAtBottom) {
+    viewer.scrollTop = viewer.scrollHeight;
+  }
+}
+
+function applyProfileColors() {
+  const viewer = document.getElementById('itermOutputViewer');
+  if (!viewer || !dashboardState.profileColors) return;
+
+  const colors = dashboardState.profileColors;
+  viewer.style.backgroundColor = colors.bg;
+  viewer.style.color = colors.fg;
+}
+
+// ============================================
+// Render
+// ============================================
+
 export function renderTerminalDashboard() {
   const panel = document.getElementById('dashboardPanel');
   if (!panel) return;
 
-  const status = dashboardState.itermStatus;
-  const gitStatus = dashboardState.gitStatus;
-  const gitHistory = dashboardState.gitHistory;
-  const gitBranch = dashboardState.gitBranch;
-  const activityData = buildActivityData(gitHistory);
-  const lastCommit = getLastCommit(gitHistory);
-  const commitsThisWeek = getCommitsThisWeek(gitHistory);
+  const allTabs = dashboardState.itermStatus?.tabs || [];
+  const groups = buildProjectGroups(allTabs);
 
-  // Get all tabs and filter for project
-  const allTabs = status?.tabs || [];
-  const projectTabs = getProjectTabs(allTabs);
-  const displayTabs = dashboardState.activeTermTab === 'project' ? projectTabs : allTabs;
+  // Auto-select first project if nothing selected yet
+  if (!dashboardState.selectedProjectName && groups.length > 0) {
+    dashboardState.selectedProjectName = groups[0].name;
+  }
 
-  // Calculate total commits in last 12 weeks
-  const totalCommits = gitHistory?.length || 0;
+  const selectedGroup = groups.find(g => g.name === dashboardState.selectedProjectName);
+  const selectedTabs = selectedGroup?.tabs || [];
+  const isRealProject = selectedGroup && selectedGroup.name !== 'Other';
+
+  // Stop viewing only if the session no longer exists at all (tab closed in iTerm2)
+  if (dashboardState.viewingSessionId && !allTabs.some(t => t.sessionId === dashboardState.viewingSessionId)) {
+    stopViewing();
+  }
+
+  const viewingTab = allTabs.find(t => t.sessionId === dashboardState.viewingSessionId);
 
   panel.innerHTML = `
-    <div class="terminal-dashboard">
-      <!-- Git Status Card -->
-      <div class="dashboard-card git-status-card">
+    <div class="terminal-dashboard split-view">
+      <!-- Left: Project list -->
+      <div class="dashboard-card projects-card">
         <div class="card-header">
-          <span class="card-icon">📊</span>
-          <span class="card-title">Git Activity</span>
-          ${gitBranch ? `<span class="branch-badge">⎇ ${escapeHtml(gitBranch)}</span>` : ''}
+          <span class="card-title">Projects</span>
+          <button class="term-refresh-btn" onclick="window.itermRefreshDashboard()" title="Refresh">↻</button>
         </div>
-        <div class="card-content">
-          ${gitStatus ? `
-            <!-- Stats row -->
-            <div class="git-stats-row">
-              <div class="git-stat">
-                <span class="stat-value ${gitStatus.staged > 0 ? 'has-changes' : ''}">${gitStatus.staged}</span>
-                <span class="stat-label">Staged</span>
-              </div>
-              <div class="git-stat">
-                <span class="stat-value ${gitStatus.unstaged > 0 ? 'has-changes' : ''}">${gitStatus.unstaged}</span>
-                <span class="stat-label">Modified</span>
-              </div>
-              <div class="git-stat">
-                <span class="stat-value ${gitStatus.untracked > 0 ? 'has-changes' : ''}">${gitStatus.untracked}</span>
-                <span class="stat-label">Untracked</span>
-              </div>
-              <div class="git-stat">
-                <span class="stat-value">${commitsThisWeek}</span>
-                <span class="stat-label">This Week</span>
-              </div>
-              <div class="git-stat">
-                <span class="stat-value">${totalCommits}</span>
-                <span class="stat-label">12 Weeks</span>
-              </div>
-            </div>
-
-            <!-- Activity graph -->
-            <div class="activity-graph">
-              <div class="activity-months">
-                ${activityData.months?.map(m => `<span style="left: ${m.weekIndex * 18}px">${m.label}</span>`).join('') || ''}
-              </div>
-              <div class="activity-grid">
-                ${activityData.weeks?.map(week => `
-                  <div class="activity-week">
-                    ${week.map(day => `
-                      <div class="activity-day level-${getActivityLevel(day.count)}" title="${day.date}: ${day.count} commits"></div>
-                    `).join('')}
-                  </div>
-                `).join('') || ''}
-              </div>
-              <div class="activity-legend">
-                <span>Less</span>
-                <div class="activity-day level-0"></div>
-                <div class="activity-day level-1"></div>
-                <div class="activity-day level-2"></div>
-                <div class="activity-day level-3"></div>
-                <div class="activity-day level-4"></div>
-                <span>More</span>
-              </div>
-            </div>
-
-            <!-- Last commit -->
-            ${lastCommit ? `
-              <div class="last-commit">
-                <div class="last-commit-header">
-                  <span class="commit-icon">⚡</span>
-                  <span class="commit-time">${formatRelativeTime(lastCommit.date)}</span>
-                </div>
-                <div class="commit-message">${escapeHtml(lastCommit.subject || '')}</div>
-                <div class="commit-author">${escapeHtml(lastCommit.author || '')}</div>
-              </div>
-            ` : ''}
-          ` : `
-            <div class="no-activity">Not a git repository</div>
-          `}
-        </div>
-      </div>
-
-      <!-- iTerm2 Terminals Card -->
-      <div class="dashboard-card terminals-card">
-        <div class="card-header">
-          <span class="card-icon">📍</span>
-          <span class="card-title">iTerm2 Terminals</span>
-          <span class="card-count">${allTabs.length}</span>
-        </div>
-        <div class="terminals-tabs">
-          <button class="term-tab ${dashboardState.activeTermTab === 'project' ? 'active' : ''}" onclick="window.setTerminalTab('project')">This Project</button>
-          <button class="term-tab ${dashboardState.activeTermTab === 'all' ? 'active' : ''}" onclick="window.setTerminalTab('all')">All</button>
-          <span class="tab-spacer"></span>
-          ${dashboardState.activeTermTab === 'project' ? `
-            <button class="term-add-btn" onclick="window.itermCreateTab()" title="New Terminal">+</button>
-          ` : ''}
-        </div>
-        <div class="card-content">
-          ${displayTabs.length > 0 ? `
-            <div class="terminals-list">
-              ${displayTabs.map(tab => `
-                <div class="terminal-item ${tab.isActive ? 'active' : ''}" onclick="window.itermSwitchTab(${tab.windowId}, ${tab.tabIndex})">
-                  <div class="terminal-status ${tab.isActive ? 'running' : 'idle'}"></div>
-                  <div class="terminal-info">
-                    <span class="terminal-name">${escapeHtml(tab.name)}</span>
-                  </div>
-                  <button class="terminal-edit-btn" onclick="event.stopPropagation(); window.itermRenameTab(${tab.windowId}, ${tab.tabIndex}, '${escapeHtml(tab.name).replace(/'/g, "\\'")}')" title="Rename">✎</button>
+        <div class="card-content terminal-list-content">
+          ${groups.length > 0 ? `
+            <div class="terminal-list">
+              ${groups.map(g => `
+                <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
+                     onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
+                  ${g.icon ? `<span class="project-icon">${g.icon}</span>` : ''}
+                  <span class="terminal-list-name">${escapeHtml(g.name)}</span>
+                  ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length}</span>` : ''}
                 </div>
               `).join('')}
             </div>
           ` : `
-            <div class="no-terminals">${dashboardState.activeTermTab === 'project' ? 'No terminals for this project' : 'No terminals open'}</div>
+            <div class="no-terminals">No terminals open in iTerm2</div>
           `}
         </div>
       </div>
+
+      <!-- Right: Terminal tabs + output -->
+      <div class="dashboard-card output-card">
+        ${selectedGroup ? `
+          <!-- Terminal tabs bar -->
+          <div class="terminal-tabs-bar">
+            <div class="terminal-tabs-scroll">
+              ${selectedTabs.map(tab => `
+                <button class="term-tab-btn ${tab.sessionId === dashboardState.viewingSessionId ? 'active' : ''}"
+                        onclick="window.itermSelectTerminal('${tab.sessionId}')"
+                        ondblclick="event.preventDefault(); window.itermRenameTab('${tab.sessionId}', '${escapeHtml(tab.name).replace(/'/g, "\\'")}')"
+                        title="Click to view, double-click to rename">
+                  ${escapeHtml(tab.name)}
+                  <span class="term-tab-focus" onclick="event.stopPropagation(); window.itermFocusSession('${tab.sessionId}')" title="Focus in iTerm2">⤴</span>
+                </button>
+              `).join('')}
+            </div>
+            ${isRealProject ? `<button class="term-add-btn" onclick="window.itermCreateTab()" title="New Terminal">+</button>` : ''}
+          </div>
+
+          <!-- Output viewer -->
+          ${dashboardState.viewingSessionId ? (
+            dashboardState.sessionContents?.startsWith('ERROR:') ? `
+            <div class="output-viewer-container">
+              <div class="bridge-error">
+                <div class="bridge-error-title">Python Bridge Error</div>
+                <div class="bridge-error-msg">${escapeHtml(dashboardState.sessionContents.slice(7))}</div>
+                <div class="bridge-error-help">
+                  Setup:<br>
+                  1. cd scripts && python3 -m venv venv && source venv/bin/activate && pip install iterm2<br>
+                  2. iTerm2 → Settings → General → Magic → Enable Python API<br>
+                  3. Restart Claudilandia
+                </div>
+              </div>
+            </div>
+          ` : `
+            <div class="output-viewer-container">
+              <div class="iterm-output-viewer" id="itermOutputViewer"></div>
+              <div class="keyboard-helper">
+                <button class="key-btn" onclick="window.itermSendKey('enter')">Enter</button>
+                <button class="key-btn" onclick="window.itermSendKey('shift-tab')">Shift+Tab</button>
+                <button class="key-btn" onclick="window.itermSendKey('esc')">ESC</button>
+                <button class="key-btn" onclick="window.itermSendKey('tab')">Tab</button>
+                <button class="key-btn" onclick="window.itermSendKey('up')">↑</button>
+                <button class="key-btn" onclick="window.itermSendKey('down')">↓</button>
+                <span class="bridge-indicator ${dashboardState.useStyledMode ? 'active' : ''}" title="${dashboardState.useStyledMode ? 'Python bridge (styled)' : 'Not connected'}"></span>
+              </div>
+              <div class="command-input-bar">
+                <input type="text" id="itermCommandInput" class="command-input"
+                       placeholder="Type command and press Enter..." autocomplete="off" spellcheck="false"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();window.itermSendCommand();}">
+              </div>
+            </div>
+          `) : `
+            <div class="output-placeholder">
+              ${selectedTabs.length === 0 && isRealProject ? `
+                <span>No terminals for this project</span>
+                <button class="create-first-btn" onclick="window.itermCreateTab()">Create Terminal</button>
+              ` : `
+                <span>Select a terminal tab to view its output</span>
+              `}
+            </div>
+          `}
+        ` : `
+          <div class="output-placeholder">
+            <span>Select a project</span>
+          </div>
+        `}
+      </div>
     </div>
   `;
+
+  // Populate and scroll output on initial render
+  if (dashboardState.viewingSessionId) {
+    if (dashboardState.useStyledMode && dashboardState.styledLines) {
+      applyProfileColors();
+      updateStyledOutputViewer();
+    } else if (dashboardState.sessionContents) {
+      const viewer = document.getElementById('itermOutputViewer');
+      if (viewer) {
+        viewer.textContent = dashboardState.sessionContents;
+        viewer.scrollTop = viewer.scrollHeight;
+      }
+    }
+  }
 }
 
-// Show terminal dashboard
 export function showTerminalDashboard() {
   refreshDashboardData();
 }
 
-// Add CSS styles
+// ============================================
+// Styles
+// ============================================
+
 function addTerminalDashboardStyles() {
   if (document.getElementById('terminal-dashboard-styles')) return;
 
   const style = document.createElement('style');
   style.id = 'terminal-dashboard-styles';
   style.textContent = `
-    /* Terminal Dashboard */
     .terminal-dashboard {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
       gap: 16px;
       padding: 20px;
       height: 100%;
-      overflow-y: auto;
-      align-content: start;
+      overflow: hidden;
     }
 
-    /* Dashboard Card */
+    .terminal-dashboard.split-view {
+      grid-template-columns: 220px 1fr;
+    }
+
+    /* Cards */
     .dashboard-card {
       background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
       border: 1px solid #334155;
       border-radius: 16px;
       overflow: hidden;
-      transition: all 0.2s ease;
-    }
-
-    .dashboard-card:hover {
-      border-color: #475569;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
 
     .card-header {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 16px 20px;
+      padding: 12px 16px;
       background: rgba(255, 255, 255, 0.02);
       border-bottom: 1px solid #334155;
-    }
-
-    .card-icon {
-      font-size: 18px;
+      flex-shrink: 0;
     }
 
     .card-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: #f1f5f9;
       flex: 1;
     }
 
     .card-count {
-      font-size: 12px;
-      color: #64748b;
-      background: #334155;
-      padding: 2px 10px;
-      border-radius: 12px;
-    }
-
-    .card-time {
       font-size: 11px;
       color: #64748b;
-    }
-
-    .card-content {
-      padding: 16px 20px;
-    }
-
-    /* Status Badge */
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .status-icon {
-      font-size: 12px;
-    }
-
-    /* Claude Info */
-    .claude-info {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .info-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      background: #0f172a;
-      border-radius: 8px;
-      font-size: 12px;
-    }
-
-    .info-label {
-      color: #64748b;
-    }
-
-    .info-value {
-      color: #e2e8f0;
-      font-family: 'JetBrains Mono', monospace;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 200px;
-    }
-
-    .no-activity {
-      color: #64748b;
-      font-size: 13px;
-      text-align: center;
-      padding: 20px;
-    }
-
-    /* Terminals List */
-    .terminals-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .terminal-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
-      background: #0f172a;
-      border-radius: 10px;
-      transition: all 0.15s ease;
-    }
-
-    .terminal-item:hover {
-      background: #1e293b;
-    }
-
-    .terminal-item.active {
-      background: linear-gradient(135deg, #22c55e15 0%, #0f172a 100%);
-      border: 1px solid #22c55e40;
-    }
-
-    .terminal-status {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+      background: #334155;
+      padding: 2px 8px;
+      border-radius: 12px;
       flex-shrink: 0;
     }
 
-    .terminal-status.running {
-      background: #22c55e;
-      box-shadow: 0 0 8px #22c55e80;
-      animation: pulse 2s infinite;
+    .card-content { padding: 12px; }
+
+    /* Project list (left) */
+    .projects-card {
+      min-height: 0;
     }
 
-    .terminal-status.idle {
-      background: #64748b;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .terminal-info {
+    .terminal-list-content {
+      overflow-y: auto;
       flex: 1;
+      min-height: 0;
+    }
+
+    .terminal-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      overflow: hidden;
+      gap: 4px;
     }
 
-    .terminal-name {
+    .terminal-list-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #0f172a;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .terminal-list-item:hover {
+      background: #1e293b;
+      border-color: #475569;
+    }
+
+    .terminal-list-item.viewing {
+      background: #1e3a5f;
+      border-color: #3b82f6;
+    }
+
+    .terminal-list-name {
+      flex: 1;
       font-size: 13px;
       color: #e2e8f0;
-      font-weight: 500;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .terminal-command {
-      font-size: 11px;
-      color: #64748b;
-    }
-
-    .active-badge {
-      font-size: 10px;
-      color: #22c55e;
-      background: #22c55e20;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 500;
+    .project-icon {
+      font-size: 14px;
+      flex-shrink: 0;
     }
 
     .no-terminals {
@@ -669,96 +658,76 @@ function addTerminalDashboardStyles() {
       padding: 20px;
     }
 
-    /* Empty State */
-    .dashboard-empty-state {
-      grid-column: 1 / -1;
+    /* Terminal tabs bar (right, top) */
+    .terminal-tabs-bar {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 60px 20px;
-      text-align: center;
-    }
-
-    .empty-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
-
-    .dashboard-empty-state h3 {
-      font-size: 18px;
-      color: #e2e8f0;
-      margin: 0 0 8px 0;
-    }
-
-    .dashboard-empty-state p {
-      font-size: 14px;
-      color: #64748b;
-      margin: 0;
-    }
-
-    /* Scrollbar styling */
-    .terminal-output-preview::-webkit-scrollbar,
-    .terminal-dashboard::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .terminal-output-preview::-webkit-scrollbar-track,
-    .terminal-dashboard::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .terminal-output-preview::-webkit-scrollbar-thumb,
-    .terminal-dashboard::-webkit-scrollbar-thumb {
-      background: #334155;
-      border-radius: 3px;
-    }
-
-    .terminal-output-preview::-webkit-scrollbar-thumb:hover,
-    .terminal-dashboard::-webkit-scrollbar-thumb:hover {
-      background: #475569;
-    }
-
-    /* Terminal tabs bar */
-    .terminals-tabs {
-      display: flex;
       gap: 4px;
       padding: 8px 12px;
       border-bottom: 1px solid #334155;
-      align-items: center;
+      flex-shrink: 0;
+      overflow: hidden;
     }
 
-    .term-tab {
-      padding: 4px 12px;
-      font-size: 12px;
-      background: transparent;
-      border: none;
-      color: #64748b;
-      cursor: pointer;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-
-    .term-tab.active {
-      background: #334155;
-      color: #f1f5f9;
-    }
-
-    .term-tab:hover:not(.active) {
-      background: #1e293b;
-    }
-
-    .tab-spacer {
+    .terminal-tabs-scroll {
+      display: flex;
+      gap: 4px;
       flex: 1;
+      overflow-x: auto;
+      min-width: 0;
+    }
+
+    .terminal-tabs-scroll::-webkit-scrollbar { height: 0; }
+
+    .term-tab-btn {
+      appearance: none;
+      border: none;
+      background: #0f172a;
+      color: #94a3b8;
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .term-tab-btn:hover {
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+
+    .term-tab-btn.active {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .term-tab-focus {
+      font-size: 12px;
+      opacity: 0;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .term-tab-btn:hover .term-tab-focus { opacity: 0.6; }
+    .term-tab-focus:hover { opacity: 1 !important; }
+
+    .no-tabs-hint {
+      color: #475569;
+      font-size: 12px;
+      padding: 4px 8px;
     }
 
     .term-add-btn {
-      width: 24px;
-      height: 24px;
+      width: 26px;
+      height: 26px;
       padding: 0;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       background: #3b82f6;
       color: white;
       font-size: 16px;
@@ -766,245 +735,244 @@ function addTerminalDashboardStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
       transition: background 0.15s;
     }
 
-    .term-add-btn:hover {
-      background: #2563eb;
-    }
+    .term-add-btn:hover { background: #2563eb; }
 
-    /* Terminal item clickable */
-    .terminal-item {
-      cursor: pointer;
-    }
-
-    /* Edit button */
-    .terminal-edit-btn {
-      opacity: 0;
-      background: transparent;
+    .term-refresh-btn {
+      width: 24px;
+      height: 24px;
+      padding: 0;
       border: none;
-      color: #64748b;
+      border-radius: 4px;
+      background: #475569;
+      color: white;
+      font-size: 14px;
       cursor: pointer;
-      padding: 4px 6px;
-      font-size: 12px;
-      transition: opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
     }
 
-    .terminal-item:hover .terminal-edit-btn {
-      opacity: 1;
+    .term-refresh-btn:hover { background: #64748b; }
+
+    /* Output card (right) */
+    .output-card { min-height: 0; }
+
+    .output-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #475569;
+      font-size: 13px;
     }
 
-    .terminal-edit-btn:hover {
-      color: #3b82f6;
+    .output-viewer-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
 
-    /* Git Status Card */
-    .git-status-card .card-header {
-      gap: 8px;
+    .iterm-output-viewer {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: auto;
+      margin: 0;
+      padding: 8px 12px;
+      background: #000000;
+      color: #c7c7c7;
+      font-family: 'Menlo', 'Monaco', 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      border: none;
     }
 
-    .branch-badge {
+    .term-line {
+      min-height: 1.35em;
+      white-space: pre;
+    }
+
+    .term-line span {
+      white-space: pre;
+    }
+
+    .keyboard-helper {
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      background: #0f172a;
+      border-top: 1px solid #334155;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      align-items: center;
+    }
+
+    .key-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 3px 8px;
       font-size: 11px;
-      color: #a78bfa;
-      background: #7c3aed20;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-family: 'JetBrains Mono', monospace;
-      margin-left: auto;
+      font-family: 'Menlo', 'Monaco', monospace;
+      cursor: pointer;
+      transition: all 0.1s;
+      line-height: 1.4;
     }
 
-    .git-stats-row {
+    .key-btn:hover {
+      background: #334155;
+      color: #e2e8f0;
+      border-color: #475569;
+    }
+
+    .key-btn:active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .command-input-bar {
       display: flex;
       gap: 8px;
-      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: #0f172a;
+      border-top: 1px solid #334155;
+      flex-shrink: 0;
     }
 
-    .git-stat {
+    .command-input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', 'Menlo', 'Monaco', monospace;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .command-input:focus { border-color: #3b82f6; }
+    .command-input::placeholder { color: #475569; }
+
+    .create-first-btn {
+      margin-top: 12px;
+      appearance: none;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .create-first-btn:hover { background: #2563eb; }
+
+    .bridge-error {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 8px 6px;
-      background: #0f172a;
-      border-radius: 8px;
-      min-width: 0;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+      gap: 12px;
     }
 
-    .stat-value {
-      font-size: 18px;
+    .bridge-error-title {
+      font-size: 15px;
       font-weight: 600;
-      color: #e2e8f0;
-      font-family: 'JetBrains Mono', monospace;
+      color: #ef4444;
     }
 
-    .stat-value.has-changes {
-      color: #fbbf24;
+    .bridge-error-msg {
+      font-size: 13px;
+      color: #94a3b8;
+      max-width: 500px;
     }
 
-    .stat-label {
-      font-size: 10px;
+    .bridge-error-help {
+      font-size: 12px;
       color: #64748b;
-      margin-top: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .activity-graph {
       background: #0f172a;
+      padding: 12px 16px;
       border-radius: 8px;
-      padding: 12px;
+      text-align: left;
+      line-height: 1.8;
+      font-family: 'Menlo', 'Monaco', monospace;
     }
 
-    .activity-label {
-      display: none;
+    .bridge-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      flex-shrink: 0;
+      opacity: 0.7;
     }
 
-    .activity-grid {
-      display: flex;
-      gap: 4px;
-      overflow-x: auto;
-      padding-bottom: 4px;
-    }
-
-    .activity-week {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .activity-day {
-      width: 14px;
-      height: 14px;
-      border-radius: 3px;
-      transition: transform 0.1s;
-    }
-
-    .activity-day:hover {
-      transform: scale(1.2);
-    }
-
-    .level-0 {
-      background: #1e293b;
-    }
-
-    .level-1 {
-      background: #166534;
-    }
-
-    .level-2 {
+    .bridge-indicator.active {
       background: #22c55e;
     }
 
-    .level-3 {
-      background: #4ade80;
+    /* Scrollbars */
+    .iterm-output-viewer::-webkit-scrollbar,
+    .terminal-list-content::-webkit-scrollbar {
+      width: 6px;
     }
 
-    .level-4 {
-      background: #86efac;
-    }
-
-    .activity-legend {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      justify-content: flex-end;
-      margin-top: 8px;
-      font-size: 10px;
-      color: #64748b;
-    }
-
-    .activity-legend .activity-day {
-      width: 10px;
-      height: 10px;
-    }
-
-    /* Month labels - use same flex layout as grid */
-    .activity-months {
-      display: flex;
-      font-size: 10px;
-      color: #64748b;
-      margin-bottom: 4px;
-      height: 14px;
-      position: relative;
-    }
-
-    .activity-months span {
-      position: absolute;
-      white-space: nowrap;
-    }
-
-    /* Future days (not yet reached) */
-    .activity-day.level-future {
+    .iterm-output-viewer::-webkit-scrollbar-track,
+    .terminal-list-content::-webkit-scrollbar-track {
       background: transparent;
-      border: 1px dashed #1e293b;
     }
 
-    /* Last commit section */
-    .last-commit {
-      margin-top: 12px;
-      padding: 10px 12px;
-      background: #0f172a;
-      border-radius: 8px;
-      border-left: 3px solid #3b82f6;
+    .iterm-output-viewer::-webkit-scrollbar-thumb,
+    .terminal-list-content::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
     }
 
-    .last-commit-header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
-    }
-
-    .commit-icon {
-      font-size: 12px;
-    }
-
-    .commit-time {
-      font-size: 11px;
-      color: #64748b;
-    }
-
-    .commit-message {
-      font-size: 13px;
-      color: #e2e8f0;
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .commit-author {
-      font-size: 11px;
-      color: #64748b;
-      margin-top: 2px;
+    .iterm-output-viewer::-webkit-scrollbar-thumb:hover,
+    .terminal-list-content::-webkit-scrollbar-thumb:hover {
+      background: #475569;
     }
   `;
   document.head.appendChild(style);
 }
 
+// ============================================
 // Project switcher handler
+// ============================================
+
 export function initTerminalDashboardHandler() {
   registerStateHandler('terminalDashboard', {
     priority: 80,
 
     onBeforeSwitch: async (ctx) => {
-      // Clear dashboard state when switching projects
-      dashboardState.sessionInfo = null;
-      dashboardState.gitStatus = null;
-      dashboardState.gitBranch = null;
-      dashboardState.gitHistory = null;
+      stopViewing();
     },
 
     onLoad: (ctx) => {
-      // Refresh data for new project (no await, loads in background)
+      // Auto-select active project only if nothing is selected yet
+      if (!dashboardState.selectedProjectName && state.activeProject?.name) {
+        dashboardState.selectedProjectName = state.activeProject.name;
+      }
       if (isDashboardVisible()) {
         refreshDashboardData();
       }
     },
 
     onAfterSwitch: (ctx) => {
-      // Re-render if visible (no await needed, data loads in background)
       if (isDashboardVisible()) {
         refreshDashboardData();
       }

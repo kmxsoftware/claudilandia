@@ -206,6 +206,10 @@ export function GetITermSessionContents(arg1) {
   return window['go']['main']['App']['GetITermSessionContents'](arg1);
 }
 
+export function GetITermSessionContentsByID(arg1, arg2) {
+  return window['go']['main']['App']['GetITermSessionContentsByID'](arg1, arg2);
+}
+
 export function GetITermSessionInfo() {
   return window['go']['main']['App']['GetITermSessionInfo']();
 }
@@ -402,6 +406,10 @@ export function InstallTemplateSkill(arg1, arg2) {
   return window['go']['main']['App']['InstallTemplateSkill'](arg1, arg2);
 }
 
+export function IsBridgeAvailable() {
+  return window['go']['main']['App']['IsBridgeAvailable']();
+}
+
 export function IsDevMode() {
   return window['go']['main']['App']['IsDevMode']();
 }
@@ -474,6 +482,10 @@ export function RenameITermTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['RenameITermTab'](arg1, arg2, arg3);
 }
 
+export function RenameITermTabBySessionID(arg1, arg2) {
+  return window['go']['main']['App']['RenameITermTabBySessionID'](arg1, arg2);
+}
+
 export function ResetTestState(arg1) {
   return window['go']['main']['App']['ResetTestState'](arg1);
 }
@@ -534,6 +546,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SendITermSpecialKey(arg1, arg2) {
+  return window['go']['main']['App']['SendITermSpecialKey'](arg1, arg2);
+}
+
 export function SetActiveProject(arg1) {
   return window['go']['main']['App']['SetActiveProject'](arg1);
 }
@@ -566,8 +582,16 @@ export function SwitchITermTab(arg1, arg2) {
   return window['go']['main']['App']['SwitchITermTab'](arg1, arg2);
 }
 
+export function SwitchITermTabBySessionID(arg1) {
+  return window['go']['main']['App']['SwitchITermTabBySessionID'](arg1);
+}
+
 export function TogglePromptPinned(arg1, arg2, arg3) {
   return window['go']['main']['App']['TogglePromptPinned'](arg1, arg2, arg3);
+}
+
+export function UnwatchITermSession() {
+  return window['go']['main']['App']['UnwatchITermSession']();
 }
 
 export function UnwatchProjectCoverage(arg1) {
@@ -598,12 +622,20 @@ export function UpdateUIState(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateUIState'](arg1, arg2, arg3, arg4);
 }
 
+export function WatchITermSession(arg1) {
+  return window['go']['main']['App']['WatchITermSession'](arg1);
+}
+
 export function WatchProjectCoverage(arg1) {
   return window['go']['main']['App']['WatchProjectCoverage'](arg1);
 }
 
 export function WriteITermText(arg1, arg2) {
   return window['go']['main']['App']['WriteITermText'](arg1, arg2);
+}
+
+export function WriteITermTextBySessionID(arg1, arg2, arg3) {
+  return window['go']['main']['App']['WriteITermTextBySessionID'](arg1, arg2, arg3);
 }
 
 export function WriteTerminal(arg1, arg2) {

@@ -15,10 +15,12 @@ import (
 
 // ITermTab represents a tab in iTerm2
 type ITermTab struct {
-	WindowID int    `json:"windowId"`
-	TabIndex int    `json:"tabIndex"`
-	Name     string `json:"name"`
-	IsActive bool   `json:"isActive"`
+	WindowID  int    `json:"windowId"`
+	TabIndex  int    `json:"tabIndex"`
+	SessionID string `json:"sessionId"`
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	IsActive  bool   `json:"isActive"`
 }
 
 // ITermStatus represents the current iTerm2 status
@@ -34,6 +36,18 @@ type Controller struct {
 	onStatusChange func(status *ITermStatus)
 	pollTicker    *time.Ticker
 	stopPolling   chan struct{}
+
+	// Content watching (plain text fallback)
+	contentWatchMu      sync.Mutex
+	contentWatchStop    chan struct{}
+	contentWatchSession string
+	lastContentHash     string
+
+	// Python bridge for styled content
+	pythonBridge    *PythonBridge
+	bridgeAvailable bool
+	styledOnChange  func(*StyledContent)
+	profileOnChange func(*ProfileData)
 }
 
 // NewController creates a new iTerm2 controller
@@ -108,13 +122,13 @@ func (c *Controller) hasStatusChanged(newStatus *ITermStatus) bool {
 	if len(c.lastStatus.Tabs) != len(newStatus.Tabs) {
 		return true
 	}
-	// Simple comparison - could be more sophisticated
+	// Compare tabs by session ID, name, and active state
 	for i, tab := range newStatus.Tabs {
 		if i >= len(c.lastStatus.Tabs) {
 			return true
 		}
 		old := c.lastStatus.Tabs[i]
-		if tab.Name != old.Name || tab.IsActive != old.IsActive {
+		if tab.SessionID != old.SessionID || tab.Name != old.Name || tab.IsActive != old.IsActive || tab.TabIndex != old.TabIndex {
 			return true
 		}
 	}
@@ -157,6 +171,25 @@ tell application "iTerm2"
 			set sessName to name of sess
 			set sessId to id of sess
 
+			-- Get working directory from session variable
+			set sessPath to ""
+			try
+				tell sess
+					set sessPath to variable named "path"
+				end tell
+			end try
+
+			-- Replace quotes in path for JSON safety
+			set safePath to ""
+			repeat with pc in sessPath
+				set pc to pc as text
+				if pc is q then
+					set safePath to safePath & "'"
+				else
+					set safePath to safePath & pc
+				end if
+			end repeat
+
 			-- Strip process suffix using offset (avoids text item delimiters issues)
 			set cleanName to sessName
 			try
@@ -184,7 +217,7 @@ tell application "iTerm2"
 			end if
 			set isFirst to false
 
-			set output to output & "{" & q & "windowId" & q & ":" & windowId & "," & q & "tabIndex" & q & ":" & tabIdx & "," & q & "name" & q & ":" & q & safeName & q & "," & q & "isActive" & q & ":" & isActive & "}"
+			set output to output & "{" & q & "windowId" & q & ":" & windowId & "," & q & "tabIndex" & q & ":" & tabIdx & "," & q & "sessionId" & q & ":" & q & sessId & q & "," & q & "name" & q & ":" & q & safeName & q & "," & q & "path" & q & ":" & q & safePath & q & "," & q & "isActive" & q & ":" & isActive & "}"
 		end repeat
 	end repeat
 	set output to output & "]"
@@ -247,6 +280,39 @@ end tell
 	return nil
 }
 
+// SwitchTabBySessionID switches to a tab by its session ID (more reliable than tabIndex)
+func (c *Controller) SwitchTabBySessionID(sessionID string) error {
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		set tabIdx to 0
+		repeat with t in tabs of w
+			set tabIdx to tabIdx + 1
+			set sess to current session of t
+			if id of sess is "%s" then
+				select tab tabIdx of w
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to switch iTerm2 tab by session ID", "sessionId", sessionID, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("Switched iTerm2 tab by session ID", "sessionId", sessionID)
+	return nil
+}
+
 // CreateTab creates a new tab in iTerm2 with the specified working directory and name
 func (c *Controller) CreateTab(workingDir, tabName string) error {
 	// Escape special characters for shell and AppleScript safety
@@ -261,21 +327,22 @@ func (c *Controller) CreateTab(workingDir, tabName string) error {
 
 	// Use escape sequences to set both tab title (OSC 1) and window title (OSC 2)
 	// This is more reliable than AppleScript's "set name" which can be overridden by profile settings
+	// Only activate (steal focus) if no windows exist - otherwise create tab silently
 	script := fmt.Sprintf(`
 tell application "iTerm2"
-	activate
 	if (count of windows) is 0 then
+		activate
 		create window with default profile
 	end if
 	tell current window
 		create tab with default profile
 		tell current session
 			set name to "%s"
-			write text "cd '%s' && clear && printf '\\033]1;%s\\007\\033]2;%s\\007'"
+			write text "cd '%s' && clear && printf '\\033]1;%s\\007\\033]2;%s\\007\\033]1337;CurrentDir=%s\\007'"
 		end tell
 	end tell
 end tell
-`, escapedName, escapedPath, escapedName, escapedName)
+`, escapedName, escapedPath, escapedName, escapedName, escapedPath)
 
 	_, err := c.runAppleScript(script)
 	if err != nil {
@@ -353,6 +420,43 @@ end tell
 	return nil
 }
 
+// RenameTabBySessionID renames a tab by its session ID
+func (c *Controller) RenameTabBySessionID(sessionID, newName string) error {
+	// Sanitize the new name
+	escapedName := strings.ReplaceAll(newName, "\n", "")
+	escapedName = strings.ReplaceAll(escapedName, "\r", "")
+	escapedName = strings.ReplaceAll(escapedName, "\\", "\\\\")
+	escapedName = strings.ReplaceAll(escapedName, "\"", "\\\"")
+
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			set sess to current session of t
+			if id of sess is "%s" then
+				set name of sess to "%s"
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID, escapedName)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to rename iTerm2 tab by session ID", "sessionId", sessionID, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("Renamed iTerm2 tab by session ID", "sessionId", sessionID, "newName", newName)
+	return nil
+}
+
 // FocusITerm brings iTerm2 to the foreground
 func (c *Controller) FocusITerm() error {
 	script := `tell application "iTerm2" to activate`
@@ -373,26 +477,20 @@ func (c *Controller) WriteText(text string, pressEnter bool) error {
 	escapedText = strings.ReplaceAll(escapedText, "\r", "\\r")
 	escapedText = strings.ReplaceAll(escapedText, "\t", "\\t")
 
-	var script string
+	var writeCmd string
 	if pressEnter {
-		// Write text and press Enter
-		script = fmt.Sprintf(`
-tell application "iTerm2"
-	tell current session of current window
-		write text "%s"
-	end tell
-end tell
-`, escapedText)
+		writeCmd = fmt.Sprintf(`write text "%s" & return without newline`, escapedText)
 	} else {
-		// Write text without pressing Enter (using "write text ... without newline")
-		script = fmt.Sprintf(`
+		writeCmd = fmt.Sprintf(`write text "%s" without newline`, escapedText)
+	}
+
+	script := fmt.Sprintf(`
 tell application "iTerm2"
 	tell current session of current window
-		write text "%s" without newline
+		%s
 	end tell
 end tell
-`, escapedText)
-	}
+`, writeCmd)
 
 	_, err := c.runAppleScript(script)
 	if err != nil {
@@ -402,6 +500,246 @@ end tell
 
 	logging.Debug("Wrote text to iTerm2", "length", len(text), "pressEnter", pressEnter)
 	return nil
+}
+
+// GetSessionContentsByID returns the last N lines from a specific iTerm2 session
+func (c *Controller) GetSessionContentsByID(sessionID string, lines int) (string, error) {
+	if !c.IsRunning() {
+		return "", fmt.Errorf("iTerm2 is not running")
+	}
+
+	if lines <= 0 {
+		lines = 200
+	}
+
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			set sess to current session of t
+			if id of sess is "%s" then
+				return get contents of sess
+			end if
+		end repeat
+	end repeat
+	return "ERROR:SESSION_NOT_FOUND"
+end tell
+`, sessionID)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to get session contents by ID", "sessionId", sessionID, "error", err)
+		return "", err
+	}
+
+	if output == "ERROR:SESSION_NOT_FOUND" {
+		return "", fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	// Trim to last N lines
+	allLines := strings.Split(output, "\n")
+	if len(allLines) > lines {
+		allLines = allLines[len(allLines)-lines:]
+	}
+
+	return strings.Join(allLines, "\n"), nil
+}
+
+// WriteTextBySessionID writes text to a specific iTerm2 session by its session ID
+func (c *Controller) WriteTextBySessionID(sessionID string, text string, pressEnter bool) error {
+	if !c.IsRunning() {
+		return fmt.Errorf("iTerm2 is not running")
+	}
+
+	// Escape special characters for AppleScript
+	escapedText := strings.ReplaceAll(text, "\\", "\\\\")
+	escapedText = strings.ReplaceAll(escapedText, "\"", "\\\"")
+	escapedText = strings.ReplaceAll(escapedText, "\n", "\\n")
+	escapedText = strings.ReplaceAll(escapedText, "\r", "\\r")
+	escapedText = strings.ReplaceAll(escapedText, "\t", "\\t")
+
+	var writeCmd string
+	if pressEnter {
+		// Use explicit carriage return (ASCII 13) instead of implicit newline
+		// Some terminal configs need \r not \n to trigger command execution
+		writeCmd = fmt.Sprintf(`write text "%s" & return without newline`, escapedText)
+	} else {
+		writeCmd = fmt.Sprintf(`write text "%s" without newline`, escapedText)
+	}
+
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			set sess to current session of t
+			if id of sess is "%s" then
+				tell sess
+					%s
+				end tell
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID, writeCmd)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to write text by session ID", "sessionId", sessionID, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Debug("Wrote text to iTerm2 session", "sessionId", sessionID, "length", len(text), "pressEnter", pressEnter)
+	return nil
+}
+
+// SendSpecialKeyBySessionID sends a special key/control sequence to a specific session
+func (c *Controller) SendSpecialKeyBySessionID(sessionID string, key string) error {
+	if !c.IsRunning() {
+		return fmt.Errorf("iTerm2 is not running")
+	}
+
+	// Map key names to AppleScript expressions
+	var asExpr string
+	switch key {
+	case "ctrl-c":
+		asExpr = `ASCII character 3`
+	case "ctrl-d":
+		asExpr = `ASCII character 4`
+	case "ctrl-z":
+		asExpr = `ASCII character 26`
+	case "ctrl-l":
+		asExpr = `ASCII character 12`
+	case "ctrl-a":
+		asExpr = `ASCII character 1`
+	case "ctrl-e":
+		asExpr = `ASCII character 5`
+	case "ctrl-u":
+		asExpr = `ASCII character 21`
+	case "ctrl-k":
+		asExpr = `ASCII character 11`
+	case "ctrl-r":
+		asExpr = `ASCII character 18`
+	case "tab":
+		asExpr = `ASCII character 9`
+	case "shift-tab":
+		asExpr = `(ASCII character 27) & "[Z"`
+	case "esc":
+		asExpr = `ASCII character 27`
+	case "up":
+		asExpr = `(ASCII character 27) & "[A"`
+	case "down":
+		asExpr = `(ASCII character 27) & "[B"`
+	case "enter":
+		asExpr = `return`
+	default:
+		return fmt.Errorf("unknown special key: %s", key)
+	}
+
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			set sess to current session of t
+			if id of sess is "%s" then
+				tell sess
+					write text (%s) without newline
+				end tell
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID, asExpr)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to send special key", "sessionId", sessionID, "key", key, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Debug("Sent special key to iTerm2 session", "sessionId", sessionID, "key", key)
+	return nil
+}
+
+// StartContentWatching starts watching a session's content for changes.
+// Only one session can be watched at a time - calling again stops the previous watcher.
+func (c *Controller) StartContentWatching(sessionID string, lines int, interval time.Duration, onChange func(string)) {
+	c.StopContentWatching()
+
+	c.contentWatchMu.Lock()
+	c.contentWatchSession = sessionID
+	c.contentWatchStop = make(chan struct{})
+	stopCh := c.contentWatchStop
+	c.lastContentHash = ""
+	c.contentWatchMu.Unlock()
+
+	go func() {
+		// Initial fetch
+		c.pollContent(sessionID, lines, onChange)
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				c.pollContent(sessionID, lines, onChange)
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+
+	logging.Info("Content watching started", "sessionId", sessionID, "interval", interval)
+}
+
+// StopContentWatching stops the content watcher
+func (c *Controller) StopContentWatching() {
+	c.contentWatchMu.Lock()
+	defer c.contentWatchMu.Unlock()
+
+	if c.contentWatchStop != nil {
+		close(c.contentWatchStop)
+		c.contentWatchStop = nil
+		c.contentWatchSession = ""
+		c.lastContentHash = ""
+		logging.Info("Content watching stopped")
+	}
+}
+
+func (c *Controller) pollContent(sessionID string, lines int, onChange func(string)) {
+	contents, err := c.GetSessionContentsByID(sessionID, lines)
+	if err != nil {
+		logging.Debug("Content poll error", "sessionId", sessionID, "error", err)
+		// Emit error marker so frontend knows session is gone
+		onChange("[Session disconnected]")
+		return
+	}
+
+	// Simple hash: use content length + first/last chars as quick check
+	hash := fmt.Sprintf("%d:%s", len(contents), contents)
+
+	c.contentWatchMu.Lock()
+	changed := hash != c.lastContentHash
+	if changed {
+		c.lastContentHash = hash
+	}
+	c.contentWatchMu.Unlock()
+
+	if changed {
+		onChange(contents)
+	}
 }
 
 func (c *Controller) runAppleScript(script string) (string, error) {
@@ -534,4 +872,112 @@ end tell
 		JobPid:         jobPid,
 		IsProcessing:   isProcessing,
 	}, nil
+}
+
+// ============================================
+// Python Bridge Integration
+// ============================================
+
+// InitPythonBridge attempts to start the Python bridge for styled content.
+// Falls back silently to plain text if unavailable.
+func (c *Controller) InitPythonBridge(scriptPath string, pythonPath string) error {
+	bridge := NewPythonBridge(scriptPath, pythonPath)
+
+	bridge.SetContentHandler(func(content *StyledContent) {
+		c.mu.RLock()
+		handler := c.styledOnChange
+		c.mu.RUnlock()
+		if handler != nil {
+			handler(content)
+		}
+	})
+
+	bridge.SetProfileHandler(func(profile *ProfileData) {
+		c.mu.RLock()
+		handler := c.profileOnChange
+		c.mu.RUnlock()
+		if handler != nil {
+			handler(profile)
+		}
+	})
+
+	bridge.SetErrorHandler(func(msg string) {
+		logging.Warn("Python bridge error", "message", msg)
+	})
+
+	if err := bridge.Start(); err != nil {
+		logging.Warn("Python bridge unavailable, using plain text", "error", err)
+		return err
+	}
+
+	if err := bridge.WaitReady(10 * time.Second); err != nil {
+		bridge.Stop()
+		logging.Warn("Python bridge failed to connect to iTerm2", "error", err)
+		return err
+	}
+
+	c.mu.Lock()
+	c.pythonBridge = bridge
+	c.bridgeAvailable = true
+	c.mu.Unlock()
+
+	logging.Info("Python bridge initialized")
+	return nil
+}
+
+// StopPythonBridge stops the Python bridge process
+func (c *Controller) StopPythonBridge() {
+	c.mu.Lock()
+	bridge := c.pythonBridge
+	c.pythonBridge = nil
+	c.bridgeAvailable = false
+	c.mu.Unlock()
+
+	if bridge != nil {
+		bridge.Stop()
+	}
+}
+
+// IsBridgeAvailable returns whether styled content is available
+func (c *Controller) IsBridgeAvailable() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.bridgeAvailable && c.pythonBridge != nil && c.pythonBridge.IsReady()
+}
+
+// StartStyledContentWatching starts watching styled content via Python bridge.
+// Returns an error if the bridge is not available.
+func (c *Controller) StartStyledContentWatching(
+	sessionID string,
+	styledHandler func(*StyledContent),
+	profileHandler func(*ProfileData),
+) error {
+	if !c.IsBridgeAvailable() {
+		return fmt.Errorf("Python bridge not available. Ensure: 1) pip3 install iterm2, 2) scripts/venv exists, 3) iTerm2 Python API is enabled in Settings > General > Magic")
+	}
+
+	c.mu.Lock()
+	c.styledOnChange = styledHandler
+	c.profileOnChange = profileHandler
+	c.mu.Unlock()
+
+	logging.Info("Sending watch to Python bridge", "sessionId", sessionID)
+	if err := c.pythonBridge.SendWatch(sessionID); err != nil {
+		return fmt.Errorf("failed to send watch: %w", err)
+	}
+	return nil
+}
+
+// StopStyledContentWatching stops both styled and plain content watching
+func (c *Controller) StopStyledContentWatching() {
+	c.StopContentWatching()
+
+	if c.IsBridgeAvailable() {
+		c.pythonBridge.SendStop()
+	}
+
+	c.mu.Lock()
+	c.styledOnChange = nil
+	c.profileOnChange = nil
+	c.mu.Unlock()
 }

@@ -112,6 +112,8 @@ export function GetHookScriptContent(arg1:string,arg2:string):Promise<string>;
 
 export function GetITermSessionContents(arg1:number):Promise<string>;
 
+export function GetITermSessionContentsByID(arg1:string,arg2:number):Promise<string>;
+
 export function GetITermSessionInfo():Promise<iterm.SessionInfo>;
 
 export function GetITermStatus():Promise<iterm.ITermStatus>;
@@ -210,6 +212,8 @@ export function InstallTemplateRule(arg1:string,arg2:string):Promise<void>;
 
 export function InstallTemplateSkill(arg1:string,arg2:string):Promise<void>;
 
+export function IsBridgeAvailable():Promise<boolean>;
+
 export function IsDevMode():Promise<boolean>;
 
 export function IsDockerAvailable():Promise<boolean>;
@@ -246,6 +250,8 @@ export function RemoveMCPServer(arg1:string,arg2:string):Promise<void>;
 
 export function RenameITermTab(arg1:number,arg2:number,arg3:string):Promise<void>;
 
+export function RenameITermTabBySessionID(arg1:string,arg2:string):Promise<void>;
+
 export function ResetTestState(arg1:string):Promise<void>;
 
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
@@ -276,6 +282,8 @@ export function ScanProjectTests(arg1:string):Promise<testing.TestDiscovery>;
 
 export function SelectDirectory():Promise<string>;
 
+export function SendITermSpecialKey(arg1:string,arg2:string):Promise<void>;
+
 export function SetActiveProject(arg1:string):Promise<void>;
 
 export function SetActiveTerminal(arg1:string,arg2:string):Promise<void>;
@@ -292,7 +300,11 @@ export function StopRemoteAccess():Promise<void>;
 
 export function SwitchITermTab(arg1:number,arg2:number):Promise<void>;
 
+export function SwitchITermTabBySessionID(arg1:string):Promise<void>;
+
 export function TogglePromptPinned(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function UnwatchITermSession():Promise<void>;
 
 export function UnwatchProjectCoverage(arg1:string):Promise<void>;
 
@@ -308,8 +320,12 @@ export function UpdatePrompt(arg1:string,arg2:string,arg3:state.Prompt):Promise<
 
 export function UpdateUIState(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<void>;
 
+export function WatchITermSession(arg1:string):Promise<string>;
+
 export function WatchProjectCoverage(arg1:string):Promise<void>;
 
 export function WriteITermText(arg1:string,arg2:boolean):Promise<void>;
+
+export function WriteITermTextBySessionID(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function WriteTerminal(arg1:string,arg2:string):Promise<void>;

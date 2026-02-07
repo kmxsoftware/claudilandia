@@ -48,6 +48,7 @@ func main() {
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 		},
+		EnableDefaultContextMenu: true,
 		Debug: options.Debug{
 			OpenInspectorOnStartup: false,
 		},

@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { registerStateHandler } from './project-switcher.js';
 import { showGitDiff } from './diff.js';
 import { escapeHtml } from './utils.js';
+import { GetGitStatus, GetGitCurrentBranch } from '../../wailsjs/go/main/App';
 
 // Special tab ID for Git History
 export const GIT_TAB_ID = 'tab-git';
@@ -94,12 +95,18 @@ export async function loadGitHistory() {
   if (!state.activeProject) return;
 
   try {
-    const commits = await gitDashboardCallbacks.getGitHistory(state.activeProject.path, 50);
+    const [commits, gitStatus, gitBranch] = await Promise.all([
+      gitDashboardCallbacks.getGitHistory(state.activeProject.path, 50),
+      GetGitStatus(state.activeProject.path).catch(() => null),
+      GetGitCurrentBranch(state.activeProject.path).catch(() => null)
+    ]);
     if (commits && Array.isArray(commits)) {
       projectCommits.set(state.activeProject.id, commits);
     } else {
       projectCommits.set(state.activeProject.id, []);
     }
+    gitActivityState.gitStatus = gitStatus;
+    gitActivityState.gitBranch = gitBranch;
   } catch (err) {
     console.error('Failed to load git history:', err);
     projectCommits.set(state.activeProject.id, []);
@@ -116,6 +123,173 @@ function toggleCommitExpand(hash) {
     expandedCommits.add(hash);
   }
   renderGitDashboard();
+}
+
+// Git activity state
+let gitActivityState = {
+  gitStatus: null,
+  gitBranch: null
+};
+
+// Build activity data from git history (last 12 weeks)
+function buildActivityData(history) {
+  if (!history || history.length === 0) return { weeks: [], months: [] };
+
+  const weeksCount = 12;
+  const now = new Date();
+  const endDate = new Date(now);
+  endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
+  endDate.setHours(23, 59, 59, 999);
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - (weeksCount * 7) + 1);
+  startDate.setHours(0, 0, 0, 0);
+
+  const commitMap = new Map();
+  history.forEach(commit => {
+    if (commit.date) {
+      const key = commit.date.split('T')[0];
+      commitMap.set(key, (commitMap.get(key) || 0) + 1);
+    }
+  });
+
+  const weeks = [];
+  const currentDate = new Date(startDate);
+  for (let w = 0; w < weeksCount; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const isFuture = currentDate > now;
+      week.push({
+        date: dateStr,
+        count: isFuture ? -1 : (commitMap.get(dateStr) || 0),
+        dateObj: new Date(currentDate)
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+
+  const months = [];
+  let lastMonth = -1;
+  weeks.forEach((week, weekIndex) => {
+    for (const day of week) {
+      const month = day.dateObj.getMonth();
+      if (month !== lastMonth) {
+        months.push({ weekIndex, label: day.dateObj.toLocaleDateString('en', { month: 'short' }) });
+        lastMonth = month;
+        break;
+      }
+    }
+  });
+
+  return { weeks, months };
+}
+
+function getCommitsThisWeek(history) {
+  if (!history) return 0;
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  return history.filter(c => c.date && new Date(c.date) >= startOfWeek).length;
+}
+
+function getActivityLevel(count) {
+  if (count < 0) return 'future';
+  if (count === 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 10) return 3;
+  return 4;
+}
+
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+function renderActivityCard(commits) {
+  const activityData = buildActivityData(commits);
+  const lastCommit = commits.length > 0 ? commits[0] : null;
+  const commitsThisWeek = getCommitsThisWeek(commits);
+  const totalCommits = commits.length;
+  const gs = gitActivityState.gitStatus;
+  const branch = gitActivityState.gitBranch;
+
+  return `
+    <div class="git-activity-card">
+      <div class="git-activity-header">
+        <span>Git Activity</span>
+        ${branch ? `<span class="branch-badge">⎇ ${escapeHtml(branch)}</span>` : ''}
+      </div>
+      ${gs ? `
+        <div class="git-stats-row">
+          <div class="git-stat">
+            <span class="stat-value ${gs.staged > 0 ? 'has-changes' : ''}">${gs.staged}</span>
+            <span class="stat-label">Staged</span>
+          </div>
+          <div class="git-stat">
+            <span class="stat-value ${gs.unstaged > 0 ? 'has-changes' : ''}">${gs.unstaged}</span>
+            <span class="stat-label">Modified</span>
+          </div>
+          <div class="git-stat">
+            <span class="stat-value ${gs.untracked > 0 ? 'has-changes' : ''}">${gs.untracked}</span>
+            <span class="stat-label">Untracked</span>
+          </div>
+          <div class="git-stat">
+            <span class="stat-value">${commitsThisWeek}</span>
+            <span class="stat-label">This Week</span>
+          </div>
+          <div class="git-stat">
+            <span class="stat-value">${totalCommits}</span>
+            <span class="stat-label">12 Weeks</span>
+          </div>
+        </div>
+      ` : ''}
+      <div class="activity-graph">
+        <div class="activity-months">
+          ${activityData.months?.map(m => `<span style="left: ${m.weekIndex * 18}px">${m.label}</span>`).join('') || ''}
+        </div>
+        <div class="activity-grid">
+          ${activityData.weeks?.map(week => `
+            <div class="activity-week">
+              ${week.map(day => `
+                <div class="activity-day level-${getActivityLevel(day.count)}" title="${day.date}: ${day.count} commits"></div>
+              `).join('')}
+            </div>
+          `).join('') || ''}
+        </div>
+        <div class="activity-legend">
+          <span>Less</span>
+          <div class="activity-day level-0"></div>
+          <div class="activity-day level-1"></div>
+          <div class="activity-day level-2"></div>
+          <div class="activity-day level-3"></div>
+          <div class="activity-day level-4"></div>
+          <span>More</span>
+        </div>
+      </div>
+      ${lastCommit ? `
+        <div class="last-commit">
+          <div class="last-commit-header">
+            <span class="commit-icon">⚡</span>
+            <span class="commit-time">${formatRelativeTime(lastCommit.date)}</span>
+          </div>
+          <div class="commit-msg">${escapeHtml(lastCommit.subject || '')}</div>
+          <div class="commit-auth">${escapeHtml(lastCommit.author || '')}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
 }
 
 // Handle file click - show diff
@@ -152,6 +326,7 @@ export function renderGitDashboard() {
 
   panel.innerHTML = `
     <div class="git-dashboard-content">
+      ${renderActivityCard(commits)}
       <div class="git-dashboard-header">
         <h2>Git History</h2>
         <button class="git-refresh-btn" id="refreshGitHistory" title="Refresh">🔄</button>
@@ -333,6 +508,152 @@ function addGitDashboardStyles() {
       margin: 0 auto;
       width: 100%;
     }
+
+    /* Git Activity Card */
+    .git-activity-card {
+      background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .git-activity-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+    }
+
+    .branch-badge {
+      font-size: 11px;
+      color: #a78bfa;
+      background: #7c3aed20;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-left: auto;
+    }
+
+    .git-stats-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .git-stat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 6px;
+      background: #0f172a;
+      border-radius: 8px;
+      min-width: 0;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-value.has-changes {
+      color: #fbbf24;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: #64748b;
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .activity-graph {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .activity-grid {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .activity-week {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .activity-day {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    .level-0 { background: #1e293b; }
+    .level-1 { background: #166534; }
+    .level-2 { background: #22c55e; }
+    .level-3 { background: #4ade80; }
+    .level-4 { background: #86efac; }
+    .activity-day.level-future { background: transparent; border: 1px dashed #1e293b; }
+
+    .activity-legend {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: flex-end;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    .activity-legend .activity-day {
+      width: 10px;
+      height: 10px;
+    }
+
+    .activity-months {
+      display: flex;
+      font-size: 10px;
+      color: #64748b;
+      margin-bottom: 4px;
+      height: 14px;
+      position: relative;
+    }
+
+    .activity-months span {
+      position: absolute;
+      white-space: nowrap;
+    }
+
+    .last-commit {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #0f172a;
+      border-radius: 8px;
+      border-left: 3px solid #3b82f6;
+    }
+
+    .last-commit-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .commit-icon { font-size: 12px; }
+    .commit-time { font-size: 11px; color: #64748b; }
+    .commit-msg { font-size: 13px; color: #e2e8f0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .commit-auth { font-size: 11px; color: #64748b; margin-top: 2px; }
 
     .git-dashboard-header {
       display: flex;

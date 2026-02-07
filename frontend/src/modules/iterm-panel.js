@@ -1,13 +1,11 @@
 /**
  * iTerm2 Integration Panel
- * Displays iTerm2 connection status and tab information
+ * Simple tab buttons - click to switch, double-click to rename
  */
 
-import { GetITermStatus, LaunchITerm, CreateITermTab, SwitchITermTab, FocusITerm } from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { GetITermStatus, LaunchITerm, CreateITermTab, SwitchITermTabBySessionID, RenameITermTabBySessionID, FocusITerm } from '../../wailsjs/go/main/App';
 import { state } from './state.js';
 
-// Module state
 let itermStatus = { running: false, tabs: [] };
 let panelContainer = null;
 let initialized = false;
@@ -16,19 +14,8 @@ let initialized = false;
  * Initialize the iTerm panel module
  */
 export function initITermPanel() {
-    // Prevent duplicate initialization (memory leak fix)
-    if (initialized) {
-        return;
-    }
+    if (initialized) return;
     initialized = true;
-
-    // Listen for iTerm2 status changes from backend
-    EventsOn('iterm-status-changed', (status) => {
-        itermStatus = status;
-        renderITermPanel();
-    });
-
-    // Initial fetch
     fetchITermStatus();
 }
 
@@ -44,113 +31,82 @@ async function fetchITermStatus() {
     }
 }
 
-/**
- * Get the active project's working directory
- */
 function getActiveProjectPath() {
     return state.activeProject?.path || '';
 }
 
-/**
- * Get the active project name
- */
 function getActiveProjectName() {
     return state.activeProject?.name || 'project';
 }
 
-/**
- * Get tabs matching the current project (by name prefix)
- */
 function getProjectTabs() {
-    const projectName = getActiveProjectName();
-    const allTabs = itermStatus.tabs || [];
-
-    // Filter tabs that start with the project name
-    return allTabs.filter(tab => tab.name.startsWith(projectName + ' '));
+    return itermStatus.tabs || [];
 }
 
-/**
- * Get the next tab number for the project
- */
 function getNextTabNumber() {
-    const projectName = getActiveProjectName();
-    const projectTabs = getProjectTabs();
-
-    // Extract numbers from existing tabs
-    const numbers = projectTabs.map(tab => {
-        const match = tab.name.match(new RegExp(`^${escapeRegex(projectName)} (\\d+)$`));
-        return match ? parseInt(match[1], 10) : 0;
-    });
-
-    // Find the next available number
-    const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
-    return maxNum + 1;
+    return (itermStatus.tabs || []).length + 1;
 }
 
-/**
- * Escape special regex characters
- */
-function escapeRegex(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Launch iTerm2
- */
 async function handleLaunchITerm() {
     try {
         await LaunchITerm();
-        // Status will update via event
     } catch (err) {
         console.error('Failed to launch iTerm2:', err);
     }
 }
 
-/**
- * Create a new iTerm2 tab at project directory
- */
 async function handleCreateTab() {
     const projectPath = getActiveProjectPath();
     const projectName = getActiveProjectName();
-    if (!projectPath) {
-        console.error('No active project');
-        return;
-    }
+    if (!projectPath) return;
 
-    const tabNumber = getNextTabNumber();
-    const tabName = `${projectName} ${tabNumber}`;
-
+    const tabName = `${projectName} ${getNextTabNumber()}`;
     try {
         await CreateITermTab(projectPath, tabName);
-        // Refresh to show new tab
         setTimeout(fetchITermStatus, 500);
     } catch (err) {
         console.error('Failed to create iTerm2 tab:', err);
     }
 }
 
-/**
- * Switch to a specific iTerm2 tab
- */
-async function handleSwitchTab(windowId, tabIndex) {
-    // Immediately update UI to show the clicked tab as active
+async function handleSwitchTab(sessionId) {
+    // Instant UI update
     if (itermStatus.tabs) {
         itermStatus.tabs.forEach(tab => {
-            tab.isActive = (tab.windowId === windowId && tab.tabIndex === tabIndex);
+            tab.isActive = (tab.sessionId === sessionId);
         });
-        renderITermPanel();
+        updateActiveStates();
     }
 
     try {
-        await SwitchITermTab(windowId, tabIndex);
+        await SwitchITermTabBySessionID(sessionId);
+        // Silent sync
+        const freshStatus = await GetITermStatus();
+        const namesChanged = JSON.stringify(freshStatus.tabs?.map(t => t.name)) !==
+                            JSON.stringify(itermStatus.tabs?.map(t => t.name));
+        itermStatus = freshStatus;
+        if (namesChanged) renderITermPanel();
     } catch (err) {
         console.error('Failed to switch iTerm2 tab:', err);
     }
 }
 
-/**
- * Focus iTerm2 window
- */
+async function handleRenameTab(sessionId, currentName) {
+    const newName = prompt('Rename tab:', currentName);
+    if (!newName || newName === currentName) return;
+
+    try {
+        await RenameITermTabBySessionID(sessionId, newName);
+        const tab = itermStatus.tabs?.find(t => t.sessionId === sessionId);
+        if (tab) {
+            tab.name = newName;
+            renderITermPanel();
+        }
+    } catch (err) {
+        console.error('Failed to rename iTerm2 tab:', err);
+    }
+}
+
 async function handleFocusITerm() {
     try {
         await FocusITerm();
@@ -159,87 +115,74 @@ async function handleFocusITerm() {
     }
 }
 
-/**
- * Focus the first tab for the current project (called on project switch)
- */
 export async function focusProjectTab() {
     if (!itermStatus.running) return;
+    const tabs = getProjectTabs();
+    if (tabs.length === 0) return;
 
-    const projectTabs = getProjectTabs();
-    if (projectTabs.length === 0) return;
-
-    // Switch to the first project tab (or the active one if any)
-    const targetTab = projectTabs.find(t => t.isActive) || projectTabs[0];
+    const targetTab = tabs.find(t => t.isActive) || tabs[0];
     try {
-        await SwitchITermTab(targetTab.windowId, targetTab.tabIndex);
+        await SwitchITermTabBySessionID(targetTab.sessionId);
     } catch (err) {
         console.error('Failed to focus project tab:', err);
     }
 }
 
-/**
- * Render the iTerm panel
- */
+function updateActiveStates() {
+    if (!panelContainer) return;
+    const tabs = getProjectTabs();
+    const btns = panelContainer.querySelectorAll('.iterm-tab-btn[data-session]');
+    btns.forEach((btn, i) => {
+        const tab = tabs[i];
+        if (tab) btn.classList.toggle('active', tab.isActive);
+    });
+}
+
 export function renderITermPanel() {
     if (!panelContainer) {
         panelContainer = document.getElementById('iterm-panel');
     }
     if (!panelContainer) return;
 
-    const projectPath = getActiveProjectPath();
-    const projectName = getActiveProjectName();
-    const projectTabs = getProjectTabs();
+    const tabs = getProjectTabs();
 
-    let html = '';
+    panelContainer.innerHTML = '';
+
+    const row = document.createElement('div');
+    row.className = 'iterm-tabs-row';
 
     if (!itermStatus.running) {
-        // iTerm2 not running - show launch button
-        html = `
-            <div class="iterm-tabs-row">
-                <button class="iterm-tab-btn launch" onclick="window.itermLaunch()" title="Launch iTerm2">
-                    Open iTerm2
-                </button>
-            </div>
-        `;
+        const btn = document.createElement('button');
+        btn.className = 'iterm-tab-btn';
+        btn.textContent = 'Open iTerm2';
+        btn.onclick = handleLaunchITerm;
+        row.appendChild(btn);
     } else {
-        // iTerm2 running - show tab buttons
-        const tabButtonsHtml = projectTabs.map(tab => `
-            <button class="iterm-tab-btn ${tab.isActive ? 'active' : ''}"
-                    onclick="window.itermSwitchTab(${tab.windowId}, ${tab.tabIndex})"
-                    title="${escapeHtml(tab.name)}">
-                ${escapeHtml(tab.name)}
-            </button>
-        `).join('');
+        tabs.forEach(tab => {
+            const btn = document.createElement('button');
+            btn.className = 'iterm-tab-btn' + (tab.isActive ? ' active' : '');
+            btn.textContent = tab.name;
+            btn.setAttribute('data-session', tab.sessionId);
 
-        html = `
-            <div class="iterm-tabs-row">
-                ${tabButtonsHtml}
-            </div>
-        `;
+            // Single click = switch tab
+            btn.onclick = () => handleSwitchTab(tab.sessionId);
+
+            // Double click = rename
+            btn.ondblclick = (e) => {
+                e.preventDefault();
+                handleRenameTab(tab.sessionId, tab.name);
+            };
+
+            row.appendChild(btn);
+        });
     }
 
-    panelContainer.innerHTML = html;
+    panelContainer.appendChild(row);
 }
 
-/**
- * Escape HTML special characters
- */
-function escapeHtml(str) {
-    if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-// Expose functions to window for onclick handlers
-window.itermLaunch = handleLaunchITerm;
-window.itermCreateTab = handleCreateTab;
-window.itermSwitchTab = handleSwitchTab;
+// Global functions for external use
 window.itermFocus = handleFocusITerm;
 window.itermRefresh = fetchITermStatus;
+window.itermRenameTab = handleRenameTab;
 
-// Export for external use
 export { itermStatus, fetchITermStatus };
