@@ -117,7 +117,8 @@ window.itermSelectTerminal = async function(sessionId) {
   stopViewing();
 
   dashboardState.viewingSessionId = sessionId;
-  dashboardState.sessionContents = 'Loading...';
+  dashboardState.sessionContents = '';
+  dashboardState.useStyledMode = true;
   renderTerminalDashboard();
 
   try {
@@ -126,13 +127,11 @@ window.itermSelectTerminal = async function(sessionId) {
       dashboardState.sessionContents = result;
       dashboardState.useStyledMode = false;
       renderTerminalDashboard();
-      return;
     }
   } catch (err) {
     dashboardState.sessionContents = 'ERROR: ' + (err.message || err);
     dashboardState.useStyledMode = false;
     renderTerminalDashboard();
-    return;
   }
 };
 
@@ -321,11 +320,18 @@ function updateStyledOutputViewer() {
     indicator.title = 'Python bridge (styled)';
   }
 
-  const lines = dashboardState.styledLines;
-  if (!lines) {
+  const allLines = dashboardState.styledLines;
+  if (!allLines) {
     viewer.textContent = '';
     return;
   }
+
+  // Trim trailing empty lines so the viewer doesn't scroll past actual content
+  let lastNonEmpty = allLines.length - 1;
+  while (lastNonEmpty >= 0 && (!allLines[lastNonEmpty] || allLines[lastNonEmpty].length === 0)) {
+    lastNonEmpty--;
+  }
+  const lines = allLines.slice(0, lastNonEmpty + 1);
 
   const wasAtBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 30;
   const defaultFg = dashboardState.profileColors?.fg || '#c7c7c7';
@@ -530,6 +536,12 @@ export function renderTerminalDashboard() {
         viewer.scrollTop = viewer.scrollHeight;
       }
     }
+  }
+
+  // Auto-focus command input when a terminal is active
+  if (dashboardState.viewingSessionId) {
+    const cmdInput = document.getElementById('itermCommandInput');
+    if (cmdInput) cmdInput.focus();
   }
 }
 
@@ -958,24 +970,11 @@ export function initTerminalDashboardHandler() {
   registerStateHandler('terminalDashboard', {
     priority: 80,
 
-    onBeforeSwitch: async (ctx) => {
-      stopViewing();
-    },
-
     onLoad: (ctx) => {
       // Auto-select active project only if nothing is selected yet
       if (!dashboardState.selectedProjectName && state.activeProject?.name) {
         dashboardState.selectedProjectName = state.activeProject.name;
       }
-      if (isDashboardVisible()) {
-        refreshDashboardData();
-      }
     },
-
-    onAfterSwitch: (ctx) => {
-      if (isDashboardVisible()) {
-        refreshDashboardData();
-      }
-    }
   });
 }

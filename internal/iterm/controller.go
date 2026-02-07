@@ -477,20 +477,27 @@ func (c *Controller) WriteText(text string, pressEnter bool) error {
 	escapedText = strings.ReplaceAll(escapedText, "\r", "\\r")
 	escapedText = strings.ReplaceAll(escapedText, "\t", "\\t")
 
-	var writeCmd string
-	if pressEnter {
-		writeCmd = fmt.Sprintf(`write text "%s" & return without newline`, escapedText)
-	} else {
-		writeCmd = fmt.Sprintf(`write text "%s" without newline`, escapedText)
-	}
+	writeCmd := fmt.Sprintf(`write text "%s" without newline`, escapedText)
 
-	script := fmt.Sprintf(`
+	var script string
+	if pressEnter {
+		script = fmt.Sprintf(`
+tell application "iTerm2"
+	tell current session of current window
+		%s
+		write text (character id 13) without newline
+	end tell
+end tell
+`, writeCmd)
+	} else {
+		script = fmt.Sprintf(`
 tell application "iTerm2"
 	tell current session of current window
 		%s
 	end tell
 end tell
 `, writeCmd)
+	}
 
 	_, err := c.runAppleScript(script)
 	if err != nil {
@@ -558,16 +565,29 @@ func (c *Controller) WriteTextBySessionID(sessionID string, text string, pressEn
 	escapedText = strings.ReplaceAll(escapedText, "\r", "\\r")
 	escapedText = strings.ReplaceAll(escapedText, "\t", "\\t")
 
-	var writeCmd string
-	if pressEnter {
-		// Use explicit carriage return (ASCII 13) instead of implicit newline
-		// Some terminal configs need \r not \n to trigger command execution
-		writeCmd = fmt.Sprintf(`write text "%s" & return without newline`, escapedText)
-	} else {
-		writeCmd = fmt.Sprintf(`write text "%s" without newline`, escapedText)
-	}
+	writeCmd := fmt.Sprintf(`write text "%s" without newline`, escapedText)
 
-	script := fmt.Sprintf(`
+	var script string
+	if pressEnter {
+		script = fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		repeat with t in tabs of w
+			set sess to current session of t
+			if id of sess is "%s" then
+				tell sess
+					%s
+					write text (character id 13) without newline
+				end tell
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID, writeCmd)
+	} else {
+		script = fmt.Sprintf(`
 tell application "iTerm2"
 	repeat with w in windows
 		repeat with t in tabs of w
@@ -583,6 +603,7 @@ tell application "iTerm2"
 	return false
 end tell
 `, sessionID, writeCmd)
+	}
 
 	output, err := c.runAppleScript(script)
 	if err != nil {

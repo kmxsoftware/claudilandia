@@ -335,7 +335,28 @@ async def process_command(connection, cmd_str):
 
         emit({"type": "profile", "sessionId": session_id, "colors": palette})
 
-        # Start streaming
+        # Fetch initial content so terminal shows current state immediately
+        try:
+            initial = await session.async_get_screen_contents()
+            if initial:
+                init_lines = process_screen_contents(initial, ansi_palette)
+                try:
+                    cols = session.grid_size.width
+                    rows = session.grid_size.height
+                except Exception:
+                    cols, rows = 80, 25
+                emit({
+                    "type": "content",
+                    "sessionId": session_id,
+                    "lines": init_lines,
+                    "cursor": {"x": initial.cursor_coord.x, "y": initial.cursor_coord.y},
+                    "cols": cols,
+                    "rows": rows,
+                })
+        except Exception as e:
+            emit_error(f"Initial fetch failed: {e}")
+
+        # Start streaming for ongoing updates
         streaming_task = asyncio.create_task(
             stream_session(connection, session_id, ansi_palette)
         )
