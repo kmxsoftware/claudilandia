@@ -39,6 +39,8 @@ type AppState struct {
 	ApprovedRemoteClients []ApprovedRemoteClient `json:"approvedRemoteClients"`
 	// Terminal theme (global for all terminals)
 	TerminalTheme string `json:"terminalTheme"`
+	// Terminal font size (global for all terminals)
+	TerminalFontSize int `json:"terminalFontSize"`
 	// Window state (position, size)
 	Window *WindowState `json:"window"`
 	// Pomodoro timer settings

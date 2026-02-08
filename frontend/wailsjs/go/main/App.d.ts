@@ -182,6 +182,8 @@ export function GetTemplateRules():Promise<Array<claude.TemplateItem>>;
 
 export function GetTemplateSkills():Promise<Array<claude.TemplateItem>>;
 
+export function GetTerminalFontSize():Promise<number>;
+
 export function GetTerminalTheme():Promise<string>;
 
 export function GetTerminals():Promise<Array<main.TerminalInfo>>;
@@ -287,6 +289,8 @@ export function SendITermSpecialKey(arg1:string,arg2:string):Promise<void>;
 export function SetActiveProject(arg1:string):Promise<void>;
 
 export function SetActiveTerminal(arg1:string,arg2:string):Promise<void>;
+
+export function SetTerminalFontSize(arg1:number):Promise<void>;
 
 export function SetTerminalTheme(arg1:string):Promise<void>;
 

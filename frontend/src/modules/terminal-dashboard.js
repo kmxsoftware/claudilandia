@@ -2,7 +2,8 @@
 
 import { state } from './state.js';
 import { registerStateHandler } from './project-switcher.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey } from '../../wailsjs/go/main/App';
+import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -17,6 +18,9 @@ let dashboardState = {
   termSize: null,            // {cols, rows}
   profileColors: null,       // {fg, bg, cursor, ansi: [...]}
   useStyledMode: false,      // whether styled content is active
+  currentTheme: 'dracula',   // active theme name
+  fontSize: 12,              // active font size
+  themeMenuOpen: false,       // dropdown visibility
 };
 
 // ============================================
@@ -144,22 +148,55 @@ window.itermFocusSession = async function(sessionId) {
   }
 };
 
-// Rename terminal (double-click on tab)
-window.itermRenameTab = async function(sessionId, currentName) {
-  const newName = prompt('Rename terminal:', currentName);
-  if (newName && newName !== currentName) {
-    try {
-      await RenameITermTabBySessionID(sessionId, newName);
-      const tab = dashboardState.itermStatus?.tabs?.find(t => t.sessionId === sessionId);
-      if (tab) {
-        tab.name = newName;
-        renderTerminalDashboard();
+// Inline rename - replaces tab button text with input
+function startInlineRename(tabBtn, sessionId, currentName) {
+  if (tabBtn.querySelector('.tab-rename-input')) return; // already editing
+
+  const focusSpan = tabBtn.querySelector('.term-tab-focus');
+  const originalText = currentName;
+
+  // Replace button content with input
+  tabBtn.textContent = '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'tab-rename-input';
+  input.value = originalText;
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  tabBtn.appendChild(input);
+  if (focusSpan) tabBtn.appendChild(focusSpan);
+
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const newName = input.value.trim();
+    // Restore button text
+    input.remove();
+    tabBtn.insertBefore(document.createTextNode(escapeHtml(save && newName ? newName : originalText) + ' '), focusSpan || null);
+
+    if (save && newName && newName !== originalText) {
+      try {
+        await RenameITermTabBySessionID(sessionId, newName);
+        const tab = dashboardState.itermStatus?.tabs?.find(t => t.sessionId === sessionId);
+        if (tab) tab.name = newName;
+      } catch (err) {
+        console.error('Failed to rename tab:', err);
       }
-    } catch (err) {
-      console.error('Failed to rename tab:', err);
     }
-  }
-};
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  // Prevent click on input from triggering tab switch
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
 
 // Create new terminal for the selected project
 window.itermCreateTab = async function() {
@@ -231,6 +268,45 @@ window.itermStopViewing = function() {
   renderTerminalDashboard();
 };
 
+// Toggle theme dropdown menu
+window.itermToggleThemeMenu = function() {
+  dashboardState.themeMenuOpen = !dashboardState.themeMenuOpen;
+  const menu = document.getElementById('themeMenu');
+  if (!menu) return;
+  if (dashboardState.themeMenuOpen) {
+    const dot = document.querySelector('.theme-dot');
+    if (dot) {
+      const rect = dot.getBoundingClientRect();
+      menu.style.top = (rect.bottom + 6) + 'px';
+      menu.style.left = Math.max(8, rect.right - 140) + 'px';
+    }
+    menu.classList.add('visible');
+  } else {
+    menu.classList.remove('visible');
+  }
+};
+
+// Set terminal color theme
+window.itermSetTheme = function(themeName) {
+  dashboardState.currentTheme = themeName;
+  dashboardState.themeMenuOpen = false;
+  SetTerminalTheme(themeName);
+  applyCurrentTheme();
+  if (dashboardState.styledLines) updateStyledOutputViewer();
+  renderTerminalDashboard();
+};
+
+// Change font size by delta
+window.itermFontSize = function(delta) {
+  const newSize = Math.min(24, Math.max(10, dashboardState.fontSize + delta));
+  if (newSize === dashboardState.fontSize) return;
+  dashboardState.fontSize = newSize;
+  SetTerminalFontSize(newSize);
+  applyFontSize();
+  const display = document.querySelector('.font-size-value');
+  if (display) display.textContent = newSize;
+};
+
 // ============================================
 // Core logic
 // ============================================
@@ -286,6 +362,23 @@ export function initTerminalDashboard() {
     applyProfileColors();
     if (dashboardState.styledLines) {
       updateStyledOutputViewer();
+    }
+  });
+
+  // Load persisted theme and font size
+  GetTerminalTheme().then(theme => {
+    dashboardState.currentTheme = theme || 'dracula';
+  }).catch(() => {});
+  GetTerminalFontSize().then(size => {
+    dashboardState.fontSize = size || 12;
+  }).catch(() => {});
+
+  // Close theme menu on click outside
+  document.addEventListener('click', (e) => {
+    if (dashboardState.themeMenuOpen && !e.target.closest('.terminal-theme-selector')) {
+      dashboardState.themeMenuOpen = false;
+      const menu = document.getElementById('themeMenu');
+      if (menu) menu.classList.remove('visible');
     }
   });
 
@@ -354,14 +447,22 @@ function updateStyledOutputViewer() {
       const span = document.createElement('span');
       let style = '';
 
+      // Skip inline color when it matches profile defaults (let theme show through)
+      const fgIsDefault = !run.fg || colorsMatch(run.fg, defaultFg);
+      const bgIsDefault = !run.bg || colorsMatch(run.bg, defaultBg);
+
       if (run.inv) {
-        // Inverse: swap fg/bg
-        const fg = run.fg || defaultFg;
-        const bg = run.bg || defaultBg;
-        style += `color:${bg};background-color:${fg};`;
+        const theme = getThemeByName(dashboardState.currentTheme);
+        if (fgIsDefault && bgIsDefault) {
+          style += `color:${theme.background};background-color:${theme.foreground};`;
+        } else {
+          const fg = fgIsDefault ? theme.foreground : run.fg;
+          const bg = bgIsDefault ? theme.background : run.bg;
+          style += `color:${bg};background-color:${fg};`;
+        }
       } else {
-        if (run.fg) style += `color:${run.fg};`;
-        if (run.bg) style += `background-color:${run.bg};`;
+        if (!fgIsDefault) style += `color:${run.fg};`;
+        if (!bgIsDefault) style += `background-color:${run.bg};`;
       }
 
       if (run.b) style += 'font-weight:bold;';
@@ -391,13 +492,30 @@ function updateStyledOutputViewer() {
   }
 }
 
+function colorsMatch(a, b) {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function applyCurrentTheme() {
+  const viewer = document.getElementById('itermOutputViewer');
+  if (!viewer) return;
+  const theme = getThemeByName(dashboardState.currentTheme);
+  viewer.style.backgroundColor = theme.background;
+  viewer.style.color = theme.foreground;
+}
+
+function applyFontSize() {
+  const viewer = document.getElementById('itermOutputViewer');
+  if (!viewer) return;
+  viewer.style.fontSize = dashboardState.fontSize + 'px';
+}
+
 function applyProfileColors() {
   const viewer = document.getElementById('itermOutputViewer');
-  if (!viewer || !dashboardState.profileColors) return;
-
-  const colors = dashboardState.profileColors;
-  viewer.style.backgroundColor = colors.bg;
-  viewer.style.color = colors.fg;
+  if (!viewer) return;
+  // Theme takes priority over profile colors
+  applyCurrentTheme();
 }
 
 // ============================================
@@ -426,6 +544,7 @@ export function renderTerminalDashboard() {
   }
 
   const viewingTab = allTabs.find(t => t.sessionId === dashboardState.viewingSessionId);
+  const currentThemeObj = getThemeByName(dashboardState.currentTheme);
 
   panel.innerHTML = `
     <div class="terminal-dashboard split-view">
@@ -461,13 +580,30 @@ export function renderTerminalDashboard() {
             <div class="terminal-tabs-scroll">
               ${selectedTabs.map(tab => `
                 <button class="term-tab-btn ${tab.sessionId === dashboardState.viewingSessionId ? 'active' : ''}"
-                        onclick="window.itermSelectTerminal('${tab.sessionId}')"
-                        ondblclick="event.preventDefault(); window.itermRenameTab('${tab.sessionId}', '${escapeHtml(tab.name).replace(/'/g, "\\'")}')"
-                        title="Click to view, double-click to rename">
+                        data-session="${tab.sessionId}" data-name="${escapeHtml(tab.name)}"
+                        title="Double-click to rename">
                   ${escapeHtml(tab.name)}
                   <span class="term-tab-focus" onclick="event.stopPropagation(); window.itermFocusSession('${tab.sessionId}')" title="Focus in iTerm2">⤴</span>
                 </button>
               `).join('')}
+            </div>
+            <div class="terminal-controls">
+              <div class="terminal-theme-selector">
+                <button class="theme-dot" style="background:${currentThemeObj.color}" onclick="window.itermToggleThemeMenu()" title="Color theme"></button>
+                <div class="theme-menu ${dashboardState.themeMenuOpen ? 'visible' : ''}" id="themeMenu">
+                  ${TERMINAL_THEMES.map(t => `
+                    <button class="theme-option ${t.name === dashboardState.currentTheme ? 'active' : ''}" onclick="window.itermSetTheme('${t.name}')">
+                      <span class="theme-color" style="background:${t.color}"></span>
+                      <span class="theme-name">${t.displayName}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="terminal-font-controls">
+                <button class="font-size-btn" onclick="window.itermFontSize(-1)">-</button>
+                <span class="font-size-value">${dashboardState.fontSize}</span>
+                <button class="font-size-btn" onclick="window.itermFontSize(1)">+</button>
+              </div>
             </div>
             ${isRealProject ? `<button class="term-add-btn" onclick="window.itermCreateTab()" title="New Terminal">+</button>` : ''}
           </div>
@@ -524,10 +660,12 @@ export function renderTerminalDashboard() {
     </div>
   `;
 
-  // Populate and scroll output on initial render
+  // Always apply theme and font size when viewer exists
   if (dashboardState.viewingSessionId) {
+    applyCurrentTheme();
+    applyFontSize();
+
     if (dashboardState.useStyledMode && dashboardState.styledLines) {
-      applyProfileColors();
       updateStyledOutputViewer();
     } else if (dashboardState.sessionContents) {
       const viewer = document.getElementById('itermOutputViewer');
@@ -536,6 +674,24 @@ export function renderTerminalDashboard() {
         viewer.scrollTop = viewer.scrollHeight;
       }
     }
+  }
+
+  // Attach click + dblclick to tab buttons via event delegation
+  const tabsScroll = panel.querySelector('.terminal-tabs-scroll');
+  if (tabsScroll) {
+    tabsScroll.addEventListener('click', (e) => {
+      const btn = e.target.closest('.term-tab-btn');
+      if (!btn || btn.querySelector('.tab-rename-input')) return;
+      const sid = btn.dataset.session;
+      if (sid) window.itermSelectTerminal(sid);
+    });
+    tabsScroll.addEventListener('dblclick', (e) => {
+      const btn = e.target.closest('.term-tab-btn');
+      if (!btn) return;
+      const sid = btn.dataset.session;
+      const name = btn.dataset.name;
+      if (sid && name) startInlineRename(btn, sid, name);
+    });
   }
 
   // Auto-focus command input when a terminal is active

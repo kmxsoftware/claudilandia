@@ -615,6 +615,21 @@ func (a *App) SetTerminalTheme(themeName string) {
 	}
 }
 
+// GetTerminalFontSize returns the current terminal font size
+func (a *App) GetTerminalFontSize() int {
+	if a.stateManager == nil {
+		return 12
+	}
+	return a.stateManager.GetTerminalFontSize()
+}
+
+// SetTerminalFontSize sets the terminal font size for all terminals
+func (a *App) SetTerminalFontSize(size int) {
+	if a.stateManager != nil {
+		a.stateManager.SetTerminalFontSize(size)
+	}
+}
+
 // ============================================
 // Pomodoro Timer Methods
 // ============================================

@@ -154,12 +154,7 @@ export function setupToolsPanel() {
   // Minimize/Expand buttons
   const collapseBtn = document.getElementById('collapseToolsPanel');
   if (collapseBtn) {
-    collapseBtn.addEventListener('click', minimizeToolsPanel);
-  }
-
-  const expandBtn = document.getElementById('expandToolsPanel');
-  if (expandBtn) {
-    expandBtn.addEventListener('click', expandToolsPanel);
+    collapseBtn.addEventListener('click', toggleToolsPanel);
   }
 
   // Tools panel resizer
@@ -236,31 +231,42 @@ function updateStatusBar(tabName) {
 function minimizeToolsPanel() {
   const panel = document.getElementById('projectToolsPanel');
   const resizer = document.getElementById('toolsPanelResizer');
+  const collapseBtn = document.getElementById('collapseToolsPanel');
 
   if (!panel) return;
 
   toolsState.minimized = true;
   panel.classList.add('minimized');
 
-  if (resizer) {
-    resizer.style.display = 'none';
+  if (resizer) resizer.style.display = 'none';
+  if (collapseBtn) {
+    collapseBtn.textContent = '▲';
+    collapseBtn.title = 'Expand panel';
   }
-
-  // Update status bar with current tab
-  updateStatusBar(toolsState.activeTab);
 }
 
 function expandToolsPanel() {
   const panel = document.getElementById('projectToolsPanel');
   const resizer = document.getElementById('toolsPanelResizer');
+  const collapseBtn = document.getElementById('collapseToolsPanel');
 
   if (!panel) return;
 
   toolsState.minimized = false;
   panel.classList.remove('minimized');
 
-  if (resizer) {
-    resizer.style.display = 'flex';
+  if (resizer) resizer.style.display = 'flex';
+  if (collapseBtn) {
+    collapseBtn.textContent = '▼';
+    collapseBtn.title = 'Minimize panel';
+  }
+}
+
+function toggleToolsPanel() {
+  if (toolsState.minimized) {
+    expandToolsPanel();
+  } else {
+    minimizeToolsPanel();
   }
 }
 
@@ -288,7 +294,7 @@ function setupToolsPanelResizer() {
   const onMouseMove = (e) => {
     if (!isResizing) return;
 
-    const container = document.querySelector('.terminal-panel-container');
+    const container = document.querySelector('.main-panel');
     if (!container) return;
 
     const containerRect = container.getBoundingClientRect();
@@ -317,11 +323,11 @@ function setupToolsPanelResizer() {
 }
 
 function updateToolsPanelHeight() {
-  const terminalMain = document.querySelector('.terminal-panel-main');
+  const panelContent = document.querySelector('.main-panel > .panel-content');
   const toolsPanel = document.getElementById('projectToolsPanel');
 
-  if (terminalMain && toolsPanel && !toolsState.minimized) {
-    terminalMain.style.flex = `0 0 ${100 - toolsState.panelHeight}%`;
+  if (panelContent && toolsPanel && !toolsState.minimized) {
+    panelContent.style.flex = `1 1 ${100 - toolsState.panelHeight}%`;
     toolsPanel.style.flex = `0 0 ${toolsState.panelHeight}%`;
   }
 }
@@ -2849,21 +2855,24 @@ export function refreshToolsPanel() {
 function restoreToolsPanelState() {
   const panel = document.getElementById('projectToolsPanel');
   const resizer = document.getElementById('toolsPanelResizer');
-  const terminalMain = document.querySelector('.terminal-panel-main');
+  const panelContent = document.querySelector('.main-panel > .panel-content');
+  const collapseBtn = document.getElementById('collapseToolsPanel');
 
   if (!panel) return;
 
   if (toolsState.minimized) {
     panel.classList.add('minimized');
     if (resizer) resizer.style.display = 'none';
-    if (terminalMain) terminalMain.style.flex = '1 1 auto';
+    if (panelContent) panelContent.style.flex = '1 1 auto';
+    if (collapseBtn) { collapseBtn.textContent = '▲'; collapseBtn.title = 'Expand panel'; }
   } else {
     panel.classList.remove('minimized');
     if (resizer) resizer.style.display = 'flex';
-    if (terminalMain && panel) {
-      terminalMain.style.flex = `0 0 ${100 - toolsState.panelHeight}%`;
+    if (panelContent && panel) {
+      panelContent.style.flex = `1 1 ${100 - toolsState.panelHeight}%`;
       panel.style.flex = `0 0 ${toolsState.panelHeight}%`;
     }
+    if (collapseBtn) { collapseBtn.textContent = '▼'; collapseBtn.title = 'Minimize panel'; }
   }
 }
 

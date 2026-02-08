@@ -106,6 +106,161 @@ function toggleTodo(id) {
   }
 }
 
+// Drag-and-drop reorder state
+let dragState = {
+  active: false,
+  itemEl: null,
+  itemId: null,
+  startY: 0,
+  startX: 0,
+  dropIndex: -1,
+  sourceIndex: -1,
+  indicator: null,
+};
+const DRAG_THRESHOLD = 5;
+
+function getDropIndicator() {
+  if (!dragState.indicator) {
+    const el = document.createElement('div');
+    el.className = 'sidebar-todo-drop-indicator';
+    dragState.indicator = el;
+  }
+  return dragState.indicator;
+}
+
+function onTodoDragStart(e) {
+  if (e.button !== 0) return;
+
+  const target = e.target;
+  if (target.matches('input, button, .sidebar-todo-checkbox, .sidebar-todo-btn, .sidebar-todo-input')) return;
+
+  const itemEl = target.closest('.sidebar-todo-item');
+  if (!itemEl || !itemEl.dataset.id) return;
+
+  const itemId = itemEl.dataset.id;
+  const todos = getCurrentTodos();
+  const sourceIndex = todos.findIndex(t => t.id === itemId);
+  if (sourceIndex === -1) return;
+
+  dragState.startY = e.clientY;
+  dragState.startX = e.clientX;
+  dragState.itemEl = itemEl;
+  dragState.itemId = itemId;
+  dragState.sourceIndex = sourceIndex;
+  dragState.active = false;
+  dragState.dropIndex = -1;
+
+  document.addEventListener('mousemove', onTodoDragMove);
+  document.addEventListener('mouseup', onTodoDragEnd);
+  e.preventDefault();
+}
+
+function onTodoDragMove(e) {
+  const deltaY = Math.abs(e.clientY - dragState.startY);
+  const deltaX = Math.abs(e.clientX - dragState.startX);
+
+  if (!dragState.active) {
+    if (deltaY < DRAG_THRESHOLD && deltaX < DRAG_THRESHOLD) return;
+    dragState.active = true;
+    dragState.itemEl.classList.add('sidebar-todo-dragging');
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  }
+
+  const todoList = document.getElementById('todoList');
+  if (!todoList) return;
+
+  const items = Array.from(todoList.querySelectorAll('.sidebar-todo-item'));
+  const mouseY = e.clientY;
+  let dropIndex = items.length;
+
+  for (let i = 0; i < items.length; i++) {
+    const rect = items[i].getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (mouseY < midY) {
+      dropIndex = i;
+      break;
+    }
+  }
+
+  dragState.dropIndex = dropIndex;
+  updateDropIndicator(todoList, items, dropIndex);
+}
+
+function updateDropIndicator(todoList, items, dropIndex) {
+  const indicator = getDropIndicator();
+
+  if (dropIndex === dragState.sourceIndex || dropIndex === dragState.sourceIndex + 1) {
+    indicator.remove();
+    return;
+  }
+
+  const listRect = todoList.getBoundingClientRect();
+  let indicatorY;
+
+  if (dropIndex === 0) {
+    const rect = items[0].getBoundingClientRect();
+    indicatorY = rect.top - listRect.top;
+  } else if (dropIndex >= items.length) {
+    const rect = items[items.length - 1].getBoundingClientRect();
+    indicatorY = rect.bottom - listRect.top;
+  } else {
+    const prevRect = items[dropIndex - 1].getBoundingClientRect();
+    const nextRect = items[dropIndex].getBoundingClientRect();
+    indicatorY = ((prevRect.bottom + nextRect.top) / 2) - listRect.top;
+  }
+
+  indicator.style.top = `${indicatorY}px`;
+
+  if (!indicator.parentNode) {
+    todoList.style.position = 'relative';
+    todoList.appendChild(indicator);
+  }
+}
+
+function onTodoDragEnd(e) {
+  document.removeEventListener('mousemove', onTodoDragMove);
+  document.removeEventListener('mouseup', onTodoDragEnd);
+
+  if (!dragState.active) {
+    resetDragState();
+    return;
+  }
+
+  if (dragState.itemEl) {
+    dragState.itemEl.classList.remove('sidebar-todo-dragging');
+  }
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+
+  const indicator = getDropIndicator();
+  indicator.remove();
+
+  const { sourceIndex, dropIndex } = dragState;
+  if (dropIndex !== -1 && dropIndex !== sourceIndex && dropIndex !== sourceIndex + 1) {
+    const todos = getCurrentTodos();
+    const [movedItem] = todos.splice(sourceIndex, 1);
+    const insertAt = dropIndex > sourceIndex ? dropIndex - 1 : dropIndex;
+    todos.splice(insertAt, 0, movedItem);
+
+    setCurrentTodos(todos);
+    saveTodos();
+    renderTodoDashboard();
+  }
+
+  resetDragState();
+}
+
+function resetDragState() {
+  dragState.active = false;
+  dragState.itemEl = null;
+  dragState.itemId = null;
+  dragState.startY = 0;
+  dragState.startX = 0;
+  dragState.dropIndex = -1;
+  dragState.sourceIndex = -1;
+}
+
 // Delete a todo
 function deleteTodo(id) {
   let todos = getCurrentTodos();
@@ -208,6 +363,12 @@ function setupTodoEventListeners() {
       deleteTodo(id);
     });
   });
+
+  // Drag-to-reorder
+  const todoList = document.getElementById('todoList');
+  if (todoList) {
+    todoList.addEventListener('mousedown', onTodoDragStart);
+  }
 
   // New todo input
   const newInput = document.getElementById('todoNewInput');
@@ -345,11 +506,15 @@ function addTodoDashboardStyles() {
 
     .sidebar-todo-item {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       padding: 8px 10px;
       border-radius: 8px;
       transition: background 0.15s;
+    }
+
+    .sidebar-todo-item .sidebar-todo-checkbox {
+      margin-top: 2px;
     }
 
     .sidebar-todo-item:hover {
@@ -374,9 +539,8 @@ function addTodoDashboardStyles() {
       font-size: 12px;
       color: #e2e8f0;
       cursor: default;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      word-break: break-word;
+      white-space: normal;
     }
 
     .sidebar-todo-actions {
@@ -406,6 +570,43 @@ function addTodoDashboardStyles() {
 
     .sidebar-todo-btn.todo-delete:hover {
       background: #ef444440;
+    }
+
+    /* Drag-to-reorder */
+    .sidebar-todo-text {
+      cursor: grab;
+    }
+
+    .sidebar-todo-item.sidebar-todo-dragging {
+      opacity: 0.4;
+      background: #334155;
+    }
+
+    .sidebar-todo-item.sidebar-todo-dragging .sidebar-todo-text {
+      cursor: grabbing;
+    }
+
+    .sidebar-todo-drop-indicator {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      height: 2px;
+      background: #89b4fa;
+      border-radius: 1px;
+      pointer-events: none;
+      z-index: 10;
+      transition: top 0.1s ease;
+    }
+
+    .sidebar-todo-drop-indicator::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #89b4fa;
     }
 
     /* Todo Input Row */

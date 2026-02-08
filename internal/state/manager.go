@@ -1203,6 +1203,31 @@ func (m *Manager) SetTerminalTheme(themeName string) {
 	}
 }
 
+// GetTerminalFontSize returns the current terminal font size
+func (m *Manager) GetTerminalFontSize() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.state.TerminalFontSize == 0 {
+		return 12 // default font size
+	}
+	return m.state.TerminalFontSize
+}
+
+// SetTerminalFontSize sets the terminal font size for all terminals
+func (m *Manager) SetTerminalFontSize(size int) {
+	if size < 10 {
+		size = 10
+	}
+	if size > 24 {
+		size = 24
+	}
+	m.mu.Lock()
+	m.state.TerminalFontSize = size
+	m.mu.Unlock()
+	m.Save()
+}
+
 // GetWindowState returns the saved window state
 func (m *Manager) GetWindowState() *WindowState {
 	m.mu.RLock()

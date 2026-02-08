@@ -346,6 +346,10 @@ export function GetTemplateSkills() {
   return window['go']['main']['App']['GetTemplateSkills']();
 }
 
+export function GetTerminalFontSize() {
+  return window['go']['main']['App']['GetTerminalFontSize']();
+}
+
 export function GetTerminalTheme() {
   return window['go']['main']['App']['GetTerminalTheme']();
 }
@@ -556,6 +560,10 @@ export function SetActiveProject(arg1) {
 
 export function SetActiveTerminal(arg1, arg2) {
   return window['go']['main']['App']['SetActiveTerminal'](arg1, arg2);
+}
+
+export function SetTerminalFontSize(arg1) {
+  return window['go']['main']['App']['SetTerminalFontSize'](arg1);
 }
 
 export function SetTerminalTheme(arg1) {
