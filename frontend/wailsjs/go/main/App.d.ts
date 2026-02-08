@@ -30,6 +30,8 @@ export function ClearTestDiscoveryCache(arg1:string):Promise<void>;
 
 export function CloseITermTab(arg1:number,arg2:number):Promise<void>;
 
+export function CloseITermTabBySessionID(arg1:string):Promise<void>;
+
 export function CloseTerminal(arg1:string):Promise<void>;
 
 export function CreateCommand(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -302,9 +304,13 @@ export function StartContainer(arg1:string):Promise<void>;
 
 export function StartRemoteAccess(arg1:remote.Config):Promise<main.RemoteAccessStatus>;
 
+export function StartVoiceRecognition(arg1:string):Promise<string>;
+
 export function StopContainer(arg1:string):Promise<void>;
 
 export function StopRemoteAccess():Promise<void>;
+
+export function StopVoiceRecognition():Promise<void>;
 
 export function SwitchITermTab(arg1:number,arg2:number):Promise<void>;
 

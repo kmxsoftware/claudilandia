@@ -21,6 +21,10 @@
         <string>10.13.0</string>
         <key>NSHighResolutionCapable</key>
         <string>true</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Claudilandia needs microphone access for voice input to the terminal.</string>
+        <key>NSSpeechRecognitionUsageDescription</key>
+        <string>Claudilandia uses speech recognition for voice-to-text terminal input.</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
         {{if .Info.FileAssociations}}

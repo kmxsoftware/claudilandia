@@ -3,6 +3,7 @@
 import { state } from './state.js';
 
 let timerInterval = null;
+let alarmInterval = null;
 let settingsOpen = false; // Track if settings panel is open
 let pomodoroCallbacks = {
   saveSettings: async () => {},
@@ -82,6 +83,21 @@ function playNotificationSound() {
   }
 }
 
+// Start looping alarm sound
+function startAlarmLoop() {
+  stopAlarmLoop();
+  playNotificationSound();
+  alarmInterval = setInterval(playNotificationSound, 3000);
+}
+
+// Stop looping alarm sound
+function stopAlarmLoop() {
+  if (alarmInterval) {
+    clearInterval(alarmInterval);
+    alarmInterval = null;
+  }
+}
+
 // Start the timer
 function startTimer() {
   if (timerInterval) return;
@@ -99,7 +115,7 @@ function startTimer() {
       timerInterval = null;
       state.pomodoro.isRunning = false;
       state.pomodoro.isCompleted = true;
-      playNotificationSound();
+      startAlarmLoop();
       renderPomodoro();
     }
   }, 1000);
@@ -119,6 +135,7 @@ function pauseTimer() {
 
 // Reset timer
 function resetTimer() {
+  stopAlarmLoop();
   pauseTimer();
   state.pomodoro.isBreak = false;
   state.pomodoro.isCompleted = false;
@@ -128,6 +145,7 @@ function resetTimer() {
 
 // Acknowledge completion and start break or new session
 function acknowledgeComplete() {
+  stopAlarmLoop();
   state.pomodoro.isCompleted = false;
 
   if (state.pomodoro.isBreak) {

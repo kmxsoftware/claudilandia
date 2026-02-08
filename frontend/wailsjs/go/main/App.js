@@ -42,6 +42,10 @@ export function CloseITermTab(arg1, arg2) {
   return window['go']['main']['App']['CloseITermTab'](arg1, arg2);
 }
 
+export function CloseITermTabBySessionID(arg1) {
+  return window['go']['main']['App']['CloseITermTabBySessionID'](arg1);
+}
+
 export function CloseTerminal(arg1) {
   return window['go']['main']['App']['CloseTerminal'](arg1);
 }
@@ -586,12 +590,20 @@ export function StartRemoteAccess(arg1) {
   return window['go']['main']['App']['StartRemoteAccess'](arg1);
 }
 
+export function StartVoiceRecognition(arg1) {
+  return window['go']['main']['App']['StartVoiceRecognition'](arg1);
+}
+
 export function StopContainer(arg1) {
   return window['go']['main']['App']['StopContainer'](arg1);
 }
 
 export function StopRemoteAccess() {
   return window['go']['main']['App']['StopRemoteAccess']();
+}
+
+export function StopVoiceRecognition() {
+  return window['go']['main']['App']['StopVoiceRecognition']();
 }
 
 export function SwitchITermTab(arg1, arg2) {

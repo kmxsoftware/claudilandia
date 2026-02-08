@@ -382,6 +382,39 @@ end tell
 	return nil
 }
 
+// CloseTabBySessionID closes the tab containing a specific session
+func (c *Controller) CloseTabBySessionID(sessionID string) error {
+	script := fmt.Sprintf(`
+tell application "iTerm2"
+	repeat with w in windows
+		set tabIdx to 0
+		repeat with t in tabs of w
+			set tabIdx to tabIdx + 1
+			set sess to current session of t
+			if id of sess is "%s" then
+				close tab tabIdx of w
+				return true
+			end if
+		end repeat
+	end repeat
+	return false
+end tell
+`, sessionID)
+
+	output, err := c.runAppleScript(script)
+	if err != nil {
+		logging.Error("Failed to close iTerm2 tab by session ID", "sessionId", sessionID, "error", err)
+		return err
+	}
+
+	if strings.TrimSpace(output) != "true" {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("Closed iTerm2 tab by session ID", "sessionId", sessionID)
+	return nil
+}
+
 // RenameTab renames a specific tab in iTerm2
 func (c *Controller) RenameTab(windowID, tabIndex int, newName string) error {
 	// Sanitize the new name

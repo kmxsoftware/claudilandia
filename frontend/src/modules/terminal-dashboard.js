@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
 import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -24,6 +24,11 @@ let dashboardState = {
   themeMenuOpen: false,       // dropdown visibility
   historyLines: null,          // plain text history lines (from scrollback)
   historyLoading: false,       // loading indicator
+  voiceState: 'idle',          // idle | listening
+  voiceBuffer: '',             // accumulated voice text
+  voiceLang: 'en-US',         // en-US | pl-PL
+  voiceAutoSubmit: true,      // send to terminal on stop or fill input
+  voiceConfigOpen: false,     // config dropdown visible
 };
 
 // ============================================
@@ -163,6 +168,29 @@ window.itermSelectTerminal = async function(sessionId) {
     dashboardState.sessionContents = 'ERROR: ' + (err.message || err);
     dashboardState.useStyledMode = false;
     renderTerminalDashboard();
+  }
+};
+
+// Close a terminal tab in iTerm2
+window.itermCloseTab = async function(sessionId) {
+  try {
+    if (dashboardState.viewingSessionId === sessionId) {
+      stopViewing();
+    }
+    await CloseITermTabBySessionID(sessionId);
+    // Refresh will happen via iterm-status-changed event
+  } catch (err) {
+    console.error('Failed to close tab:', err);
+  }
+};
+
+// Send text to the active terminal session (with Enter)
+window.itermSendText = async function(text) {
+  if (!dashboardState.viewingSessionId) return;
+  try {
+    await WriteITermTextBySessionID(dashboardState.viewingSessionId, text, true);
+  } catch (err) {
+    console.error('Failed to send text:', err);
   }
 };
 
@@ -318,6 +346,180 @@ window.itermStopViewing = function() {
   stopViewing();
   renderTerminalDashboard();
 };
+
+// ============================================
+// Voice Input
+// ============================================
+
+function updateVoiceUI() {
+  const btn = document.getElementById('voiceMicBtn');
+  const preview = document.getElementById('voicePreview');
+  if (!btn) return;
+
+  btn.classList.remove('voice-idle', 'voice-listening');
+  btn.classList.add('voice-' + dashboardState.voiceState);
+
+  if (dashboardState.voiceState === 'idle') {
+    btn.title = 'Voice input';
+    if (preview) preview.style.display = 'none';
+  } else if (dashboardState.voiceState === 'listening') {
+    btn.title = 'Listening...';
+    if (preview) {
+      preview.style.display = 'block';
+      preview.textContent = dashboardState.voiceBuffer || 'Listening...';
+    }
+  }
+
+  // Update start/stop button states
+  const startBtn = document.getElementById('voiceStartBtn');
+  const stopBtn = document.getElementById('voiceStopBtn');
+  if (startBtn) startBtn.disabled = dashboardState.voiceState === 'listening';
+  if (stopBtn) stopBtn.disabled = dashboardState.voiceState === 'idle';
+}
+
+function voiceSubmitText(text) {
+  if (!text) return;
+  if (dashboardState.voiceAutoSubmit) {
+    if (dashboardState.viewingSessionId) {
+      WriteITermTextBySessionID(dashboardState.viewingSessionId, text, true);
+    }
+  } else {
+    const input = document.getElementById('itermCommandInput');
+    if (input) {
+      input.value = (input.value ? input.value + ' ' : '') + text;
+      input.focus();
+    }
+  }
+}
+
+function stopVoiceAndSubmit() {
+  const text = dashboardState.voiceBuffer.trim();
+  StopVoiceRecognition();
+  if (text) voiceSubmitText(text);
+  dashboardState.voiceState = 'idle';
+  dashboardState.voiceBuffer = '';
+  updateVoiceUI();
+}
+
+function stopVoiceRecognition() {
+  StopVoiceRecognition();
+  dashboardState.voiceState = 'idle';
+  dashboardState.voiceBuffer = '';
+  updateVoiceUI();
+}
+
+function showVoiceError(msg) {
+  const preview = document.getElementById('voicePreview');
+  if (preview) {
+    preview.style.display = 'block';
+    preview.textContent = msg;
+    preview.style.color = '#ef4444';
+    setTimeout(() => {
+      if (dashboardState.voiceState === 'idle') {
+        preview.style.display = 'none';
+        preview.style.color = '#94a3b8';
+      }
+    }, 4000);
+  }
+}
+
+// Start voice recognition
+window.itermVoiceStart = async function() {
+  if (dashboardState.voiceState === 'listening') return;
+
+  dashboardState.voiceState = 'listening';
+  dashboardState.voiceBuffer = '';
+  voiceFinalTranscript = '';
+  updateVoiceUI();
+
+  const result = await StartVoiceRecognition(dashboardState.voiceLang);
+  if (result.startsWith('ERROR:')) {
+    showVoiceError(result.replace('ERROR: ', ''));
+    dashboardState.voiceState = 'idle';
+    updateVoiceUI();
+  }
+};
+
+// Stop voice recognition and submit
+window.itermVoiceStop = function() {
+  if (dashboardState.voiceState !== 'listening') return;
+  stopVoiceAndSubmit();
+};
+
+// Toggle mic (start/stop shortcut)
+window.itermToggleVoice = async function() {
+  if (dashboardState.voiceState === 'listening') {
+    stopVoiceAndSubmit();
+  } else {
+    window.itermVoiceStart();
+  }
+};
+
+// Config panel toggle
+window.itermToggleVoiceConfig = function(e) {
+  e && e.stopPropagation();
+  dashboardState.voiceConfigOpen = !dashboardState.voiceConfigOpen;
+  const panel = document.getElementById('voiceConfigPanel');
+  if (panel) panel.style.display = dashboardState.voiceConfigOpen ? 'block' : 'none';
+};
+
+window.itermSetVoiceLang = function(lang) {
+  dashboardState.voiceLang = lang;
+  // Update radio buttons
+  document.querySelectorAll('.voice-lang-radio').forEach(r => r.checked = r.value === lang);
+};
+
+window.itermSetVoiceAutoSubmit = function(checked) {
+  dashboardState.voiceAutoSubmit = checked;
+};
+
+// Close config panel on outside click
+document.addEventListener('click', (e) => {
+  if (dashboardState.voiceConfigOpen && !e.target.closest('.voice-config-wrapper')) {
+    dashboardState.voiceConfigOpen = false;
+    const panel = document.getElementById('voiceConfigPanel');
+    if (panel) panel.style.display = 'none';
+  }
+});
+
+// Handle voice transcript events from native macOS speech recognition
+let voiceFinalTranscript = '';
+
+EventsOn('voice-transcript', (data) => {
+  if (!data) return;
+
+  if (data.type === 'error') {
+    showVoiceError(data.message);
+    dashboardState.voiceState = 'idle';
+    updateVoiceUI();
+    return;
+  }
+
+  if (data.type === 'started' || data.type === 'stopped') return;
+
+  if (dashboardState.voiceState !== 'listening') return;
+
+  const text = data.text || '';
+  const isFinal = data.type === 'final';
+  const currentText = isFinal ? voiceFinalTranscript + text : voiceFinalTranscript + text;
+
+  if (isFinal) {
+    voiceFinalTranscript += text + ' ';
+  }
+
+  dashboardState.voiceBuffer = isFinal ? voiceFinalTranscript.trim() : currentText;
+  const preview = document.getElementById('voicePreview');
+  if (preview) {
+    preview.textContent = dashboardState.voiceBuffer || 'Listening...';
+  }
+});
+
+EventsOn('voice-stopped', () => {
+  dashboardState.voiceState = 'idle';
+  dashboardState.voiceBuffer = '';
+  voiceFinalTranscript = '';
+  updateVoiceUI();
+});
 
 // Toggle theme dropdown menu
 window.itermToggleThemeMenu = function() {
@@ -652,11 +854,15 @@ export function renderTerminalDashboard() {
                         title="Double-click to rename">
                   ${escapeHtml(tab.name)}
                   <span class="term-tab-focus" onclick="event.stopPropagation(); window.itermFocusSession('${tab.sessionId}')" title="Focus in iTerm2">⤴</span>
+                  <span class="term-tab-close" onclick="event.stopPropagation(); window.itermCloseTab('${tab.sessionId}')" title="Close terminal">×</span>
                 </button>
               `).join('')}
             </div>
             <div class="terminal-controls">
-              ${dashboardState.viewingSessionId ? `<button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button><button class="history-load-btn" onclick="window.itermFocusSession('${dashboardState.viewingSessionId}')" title="Focus in iTerm2">⌖</button>` : ''}
+              ${dashboardState.viewingSessionId ? `
+                <button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button>
+                <button class="history-load-btn" onclick="window.itermFocusSession('${dashboardState.viewingSessionId}')" title="Focus in iTerm2">⌖</button>
+              ` : ''}
               <div class="terminal-theme-selector">
                 <button class="theme-dot" style="background:${currentThemeObj.color}" onclick="window.itermToggleThemeMenu()" title="Color theme"></button>
                 <div class="theme-menu ${dashboardState.themeMenuOpen ? 'visible' : ''}" id="themeMenu">
@@ -702,7 +908,48 @@ export function renderTerminalDashboard() {
                 <button class="key-btn" onclick="window.itermSendKey('tab')">Tab</button>
                 <button class="key-btn" onclick="window.itermSendKey('up')">↑</button>
                 <button class="key-btn" onclick="window.itermSendKey('down')">↓</button>
+                <button class="term-cmd-btn" onclick="window.itermSendText('/clear')" title="Send /clear">/clear</button>
+                <button class="term-cmd-btn" onclick="window.itermSendText('/compact')" title="Send /compact">/compact</button>
                 <span class="bridge-indicator ${dashboardState.useStyledMode ? 'active' : ''}" title="${dashboardState.useStyledMode ? 'Python bridge (styled)' : 'Not connected'}"></span>
+                <div class="voice-controls">
+                  <button id="voiceMicBtn" class="voice-mic-btn voice-${dashboardState.voiceState}" onclick="window.itermToggleVoice()" title="${dashboardState.voiceState === 'listening' ? 'Stop & send' : 'Start voice'}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                  </button>
+                  <div class="voice-config-wrapper">
+                    <button class="voice-config-btn" onclick="window.itermToggleVoiceConfig(event)" title="Voice settings">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                      </svg>
+                    </button>
+                    <div id="voiceConfigPanel" class="voice-config-panel" style="display:none">
+                      <div class="voice-config-section">
+                        <div class="voice-config-label">Language</div>
+                        <label class="voice-config-option">
+                          <input type="radio" name="voiceLang" class="voice-lang-radio" value="en-US" ${dashboardState.voiceLang === 'en-US' ? 'checked' : ''} onchange="window.itermSetVoiceLang('en-US')"> English
+                        </label>
+                        <label class="voice-config-option">
+                          <input type="radio" name="voiceLang" class="voice-lang-radio" value="pl-PL" ${dashboardState.voiceLang === 'pl-PL' ? 'checked' : ''} onchange="window.itermSetVoiceLang('pl-PL')"> Polski
+                        </label>
+                      </div>
+                      <div class="voice-config-section">
+                        <label class="voice-config-option">
+                          <input type="checkbox" ${dashboardState.voiceAutoSubmit ? 'checked' : ''} onchange="window.itermSetVoiceAutoSubmit(this.checked)"> Auto submit
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="voicePreview" class="voice-preview" style="display:${dashboardState.voiceState === 'listening' ? 'block' : 'none'}">
+                <span class="voice-preview-text">${dashboardState.voiceBuffer || 'Listening...'}</span>
+                <div class="voice-preview-actions">
+                  <button id="voiceStopBtn" class="voice-action-btn voice-stop-btn" onclick="window.itermVoiceStop()" ${dashboardState.voiceState !== 'listening' ? 'disabled' : ''}>Stop & Send</button>
+                </div>
               </div>
               <div class="command-input-bar">
                 <textarea id="itermCommandInput" class="command-input" rows="3"
@@ -953,6 +1200,16 @@ function addTerminalDashboardStyles() {
     .term-tab-btn:hover .term-tab-focus { opacity: 0.6; }
     .term-tab-focus:hover { opacity: 1 !important; }
 
+    .term-tab-close {
+      font-size: 14px;
+      opacity: 0;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      margin-left: 2px;
+    }
+    .term-tab-btn:hover .term-tab-close { opacity: 0.5; }
+    .term-tab-close:hover { opacity: 1 !important; color: #ef4444; }
+
     .no-tabs-hint {
       color: #475569;
       font-size: 12px;
@@ -1158,11 +1415,141 @@ function addTerminalDashboardStyles() {
       background: #ef4444;
       flex-shrink: 0;
       opacity: 0.7;
+      margin-left: auto;
     }
 
     .bridge-indicator.active {
       background: #22c55e;
     }
+
+    /* Voice input */
+    .voice-controls {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 4px;
+    }
+    .voice-mic-btn {
+      background: none;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #64748b;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .voice-mic-btn:hover { color: #94a3b8; border-color: #475569; }
+    .voice-mic-btn.voice-listening {
+      color: #ef4444;
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      animation: voice-pulse 0.8s ease-in-out infinite;
+    }
+    @keyframes voice-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .voice-config-wrapper { position: relative; }
+    .voice-config-btn {
+      background: none;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #64748b;
+      width: 20px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .voice-config-btn:hover { color: #94a3b8; border-color: #475569; }
+    .voice-config-panel {
+      position: absolute;
+      bottom: 30px;
+      right: 0;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-width: 160px;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .voice-config-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .voice-config-section + .voice-config-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #334155;
+    }
+    .voice-config-label {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    .voice-config-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #cbd5e1;
+      cursor: pointer;
+    }
+    .voice-config-option input[type="radio"],
+    .voice-config-option input[type="checkbox"] {
+      accent-color: #3b82f6;
+      margin: 0;
+    }
+    .voice-preview {
+      padding: 6px 12px;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      font-size: 12px;
+      color: #94a3b8;
+      font-family: 'Menlo', 'Monaco', monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .voice-preview-text {
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 40px;
+      overflow-y: auto;
+    }
+    .voice-preview-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .voice-action-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      border: none;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .voice-action-btn:disabled { opacity: 0.4; cursor: default; }
+    .voice-stop-btn {
+      background: #ef4444;
+      color: white;
+    }
+    .voice-stop-btn:hover:not(:disabled) { background: #dc2626; }
 
     /* History load button */
     .history-load-btn {

@@ -556,9 +556,28 @@ body {
   gap: 12px;
 }
 
+/* Command buttons */
+.term-cmd-btn {
+  padding: 2px 8px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.term-cmd-btn:hover {
+  background: #3d3d3d;
+  color: #e2e8f0;
+}
+
 /* Theme selector */
 .terminal-theme-selector {
   position: relative;
+  margin-left: auto;
 }
 
 .theme-dot {
