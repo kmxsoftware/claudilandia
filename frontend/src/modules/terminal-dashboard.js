@@ -1,7 +1,8 @@
 // Terminal Dashboard - iTerm2 monitoring with inline output viewer
 
 import { state } from './state.js';
-import { registerStateHandler } from './project-switcher.js';
+import { registerStateHandler, switchProject } from './project-switcher.js';
+import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
 import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
@@ -109,12 +110,36 @@ function escapeHtml(text) {
 // Window handlers
 // ============================================
 
-// Select a project on the left
-window.itermSelectProject = function(projectName) {
+// Select a project on the left (does full global project switch)
+window.itermSelectProject = async function(projectName) {
   if (dashboardState.selectedProjectName === projectName) return;
+
+  // Find the project and do a full global switch
+  const project = state.projects.find(p => p.name === projectName);
+  if (project && state.activeProject?.id !== project.id) {
+    await switchProject(project.id);
+    // onAfterSwitch handler handles stopViewing + auto-select terminal + workspace info
+    return;
+  }
+
+  // For "Other" group or non-project entries, just change terminal view
   stopViewing();
   dashboardState.selectedProjectName = projectName;
+
+  const allTabs = dashboardState.itermStatus?.tabs || [];
+  const groups = buildProjectGroups(allTabs);
+  const group = groups.find(g => g.name === projectName);
+  if (group?.tabs?.length > 0) {
+    window.itermSelectTerminal(group.tabs[0].sessionId);
+    return;
+  }
   renderTerminalDashboard();
+};
+
+// Open add project modal from dashboard
+window.openAddProjectModal = function() {
+  const modal = document.getElementById('addProjectModal');
+  if (modal) modal.classList.remove('hidden');
 };
 
 // Select a terminal tab on the right (starts viewing)
@@ -594,6 +619,7 @@ export function renderTerminalDashboard() {
       <div class="dashboard-card projects-card">
         <div class="card-header">
           <span class="card-title">Projects</span>
+          <button class="term-refresh-btn" onclick="window.openAddProjectModal()" title="Add Project">+</button>
           <button class="term-refresh-btn" onclick="window.itermRefreshDashboard()" title="Refresh">↻</button>
         </div>
         <div class="card-content terminal-list-content">
@@ -1222,6 +1248,26 @@ export function initTerminalDashboardHandler() {
       // Auto-select active project only if nothing is selected yet
       if (!dashboardState.selectedProjectName && state.activeProject?.name) {
         dashboardState.selectedProjectName = state.activeProject.name;
+      }
+    },
+
+    onAfterSwitch: async (ctx) => {
+      const projectName = state.activeProject?.name;
+      if (!projectName) return;
+
+      // Update workspace info in sidebar
+      updateWorkspaceInfo();
+
+      // Switch terminal dashboard to the new project
+      stopViewing();
+      dashboardState.selectedProjectName = projectName;
+
+      // Auto-select first terminal session if one exists
+      const allTabs = dashboardState.itermStatus?.tabs || [];
+      const groups = buildProjectGroups(allTabs);
+      const group = groups.find(g => g.name === projectName);
+      if (group?.tabs?.length > 0) {
+        window.itermSelectTerminal(group.tabs[0].sessionId);
       }
     },
   });

@@ -42,126 +42,15 @@ body {
   width: 100%;
 }
 
-/* Project Tabs Bar */
-.project-tabs-bar {
-  display: flex;
-  align-items: center;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  padding: 0 8px;
-  padding-left: 0;
-  height: 42px;
-}
-
-/* Drag regions for window movement */
-.drag-region {
+/* Titlebar Drag Region */
+.titlebar-drag-region {
   --wails-draggable: drag;
   -webkit-app-region: drag;
-  height: 100%;
-  min-width: 80px; /* Space for macOS traffic lights */
+  height: 28px;
   flex-shrink: 0;
   cursor: default;
   -webkit-user-select: none;
   user-select: none;
-}
-
-.drag-region-right {
-  flex: 1;
-  min-width: 20px;
-}
-
-.project-tabs {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  max-width: calc(100% - 200px);
-  --wails-draggable: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.project-tabs::-webkit-scrollbar {
-  height: 0;
-}
-
-.project-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border-radius: 8px 8px 0 0;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
-  border-bottom: none;
-  min-width: 120px;
-  max-width: 200px;
-}
-
-.project-tab:hover {
-  background: var(--bg-surface);
-}
-
-.project-tab.active {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: #22c55e;
-  border-left-color: #22c55e;
-  border-left-width: 3px;
-}
-
-.project-tab .project-icon {
-  font-size: 16px;
-}
-
-.project-tab .project-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.project-tab .close-project {
-  opacity: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 16px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.project-tab:hover .close-project {
-  opacity: 1;
-}
-
-.project-tab .close-project:hover {
-  background: var(--error);
-  color: var(--bg-tertiary);
-}
-
-.add-project-btn {
-  --wails-draggable: no-drag;
-  -webkit-app-region: no-drag;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.add-project-btn:hover {
-  background: var(--accent);
-  color: var(--bg-tertiary);
 }
 
 /* Main Content */

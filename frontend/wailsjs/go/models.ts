@@ -1092,6 +1092,7 @@ export namespace state {
 	    approvedRemoteClients: ApprovedRemoteClient[];
 	    terminalTheme: string;
 	    terminalFontSize: number;
+	    toolsPanelHeight: number;
 	    window?: WindowState;
 	    pomodoro?: PomodoroSettings;
 	
@@ -1109,6 +1110,7 @@ export namespace state {
 	        this.approvedRemoteClients = this.convertValues(source["approvedRemoteClients"], ApprovedRemoteClient);
 	        this.terminalTheme = source["terminalTheme"];
 	        this.terminalFontSize = source["terminalFontSize"];
+	        this.toolsPanelHeight = source["toolsPanelHeight"];
 	        this.window = this.convertValues(source["window"], WindowState);
 	        this.pomodoro = this.convertValues(source["pomodoro"], PomodoroSettings);
 	    }

@@ -196,6 +196,8 @@ export function GetTestSummary(arg1:string):Promise<testing.TestSummary>;
 
 export function GetTodos(arg1:string):Promise<Array<state.TodoItem>>;
 
+export function GetToolsPanelHeight():Promise<number>;
+
 export function GetUserMCPServers():Promise<Array<claude.MCPServer>>;
 
 export function IncrementPromptUsage(arg1:string,arg2:string,arg3:boolean):Promise<void>;
@@ -293,6 +295,8 @@ export function SetActiveTerminal(arg1:string,arg2:string):Promise<void>;
 export function SetTerminalFontSize(arg1:number):Promise<void>;
 
 export function SetTerminalTheme(arg1:string):Promise<void>;
+
+export function SetToolsPanelHeight(arg1:number):Promise<void>;
 
 export function StartContainer(arg1:string):Promise<void>;
 

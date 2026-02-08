@@ -630,6 +630,21 @@ func (a *App) SetTerminalFontSize(size int) {
 	}
 }
 
+// GetToolsPanelHeight returns the saved tools panel height percentage
+func (a *App) GetToolsPanelHeight() float64 {
+	if a.stateManager == nil {
+		return 40
+	}
+	return a.stateManager.GetToolsPanelHeight()
+}
+
+// SetToolsPanelHeight saves the tools panel height percentage
+func (a *App) SetToolsPanelHeight(height float64) {
+	if a.stateManager != nil {
+		a.stateManager.SetToolsPanelHeight(height)
+	}
+}
+
 // ============================================
 // Pomodoro Timer Methods
 // ============================================

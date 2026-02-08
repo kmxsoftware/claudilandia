@@ -374,6 +374,10 @@ export function GetTodos(arg1) {
   return window['go']['main']['App']['GetTodos'](arg1);
 }
 
+export function GetToolsPanelHeight() {
+  return window['go']['main']['App']['GetToolsPanelHeight']();
+}
+
 export function GetUserMCPServers() {
   return window['go']['main']['App']['GetUserMCPServers']();
 }
@@ -568,6 +572,10 @@ export function SetTerminalFontSize(arg1) {
 
 export function SetTerminalTheme(arg1) {
   return window['go']['main']['App']['SetTerminalTheme'](arg1);
+}
+
+export function SetToolsPanelHeight(arg1) {
+  return window['go']['main']['App']['SetToolsPanelHeight'](arg1);
 }
 
 export function StartContainer(arg1) {

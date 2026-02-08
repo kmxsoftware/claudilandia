@@ -25,9 +25,7 @@ import {
   setDiffCallbacks
 } from './modules/diff.js';
 import {
-  updateClaudeStatusUI,
-  updateProjectClaudeStatus,
-  updateAllProjectClaudeStatus
+  updateClaudeStatusUI
 } from './modules/claude-status.js';
 import {
   setupToolsPanel,
@@ -48,7 +46,6 @@ import {
   setUIStateCallbacks
 } from './modules/browser.js';
 import {
-  renderProjectTabs,
   selectProject,
   updateWorkspaceInfo,
   setupEditProjectModal
@@ -274,7 +271,6 @@ async function init() {
       const project = state.projects.find(p => p.id === projectId);
       if (project) {
         state.activeProject = project;
-        renderProjectTabs();
         updateWorkspaceInfo();
       }
     }
@@ -340,13 +336,8 @@ async function init() {
 function render() {
   document.querySelector('#app').innerHTML = `
     <div class="app-container">
-      <!-- Project Tabs Bar -->
-      <div class="project-tabs-bar">
-        <div class="drag-region"></div>
-        <div class="project-tabs" id="projectTabs"></div>
-        <div class="drag-region drag-region-right"></div>
-        <button class="add-project-btn" id="addProjectBtn" title="Add Project">+</button>
-      </div>
+      <!-- Titlebar Drag Region -->
+      <div class="titlebar-drag-region"></div>
 
       <!-- Main Content -->
       <div class="main-content">
@@ -661,7 +652,6 @@ function render() {
   initBrowserTabs();
 
   // Render dynamic parts
-  renderProjectTabs();
   renderNotesSection();
   renderColorPicker();
   renderIconPicker();
@@ -669,17 +659,8 @@ function render() {
 
 function setupEventListeners() {
   // Double-click on titlebar to toggle maximize/restore
-  document.querySelector('.project-tabs-bar').addEventListener('dblclick', (e) => {
-    // Only toggle if clicking on the titlebar itself or empty space, not on interactive elements
-    const isInteractive = e.target.closest('.project-tab, .add-project-btn, button');
-    if (!isInteractive) {
-      WindowToggleMaximise();
-    }
-  });
-
-  // Add project button
-  document.getElementById('addProjectBtn').addEventListener('click', () => {
-    document.getElementById('addProjectModal').classList.remove('hidden');
+  document.querySelector('.titlebar-drag-region')?.addEventListener('dblclick', () => {
+    WindowToggleMaximise();
   });
 
   // Cancel add project
@@ -696,7 +677,6 @@ function setupEventListeners() {
     try {
       const project = await CreateProject(name, path);
       state.projects.push(project);
-      renderProjectTabs();
       selectProject(project.id);
       document.getElementById('addProjectModal').classList.add('hidden');
       document.getElementById('addProjectForm').reset();

@@ -41,6 +41,8 @@ type AppState struct {
 	TerminalTheme string `json:"terminalTheme"`
 	// Terminal font size (global for all terminals)
 	TerminalFontSize int `json:"terminalFontSize"`
+	// Tools panel height percentage (global)
+	ToolsPanelHeight float64 `json:"toolsPanelHeight"`
 	// Window state (position, size)
 	Window *WindowState `json:"window"`
 	// Pomodoro timer settings

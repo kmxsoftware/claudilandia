@@ -1,10 +1,10 @@
-// Projects module - project tabs and workspace info
+// Projects module - workspace info and project management
 
 import { state } from './state.js';
-import { DeleteProject, UpdateProject, SelectDirectory } from '../../wailsjs/go/main/App';
-import { updateAllProjectClaudeStatus } from './claude-status.js';
+import { UpdateProject, SelectDirectory } from '../../wailsjs/go/main/App';
 import { switchProject } from './project-switcher.js';
 import { renderITermPanel, focusProjectTab } from './iterm-panel.js';
+import { refreshGitStatus } from './git.js';
 
 // Open edit project modal
 export function openEditProjectModal() {
@@ -108,7 +108,6 @@ export function setupEditProjectModal() {
     const icon = iconEl?.dataset.icon || state.activeProject.icon;
 
     try {
-      // UpdateProject expects full project object
       const updatedProject = {
         ...state.activeProject,
         name,
@@ -132,7 +131,6 @@ export function setupEditProjectModal() {
       }
 
       // Update UI
-      renderProjectTabs();
       updateWorkspaceInfo();
 
       // Refresh git status for new path
@@ -146,48 +144,6 @@ export function setupEditProjectModal() {
   });
 }
 
-// Render project tabs
-export function renderProjectTabs() {
-  const container = document.getElementById('projectTabs');
-  if (!container) return;
-
-  container.innerHTML = state.projects.map(p => `
-    <div class="project-tab ${state.activeProject?.id === p.id ? 'active' : ''}"
-         data-id="${p.id}"
-         style="--project-color: ${p.color}">
-      <span class="project-icon">${p.icon}</span>
-      <span class="project-name">${p.name}</span>
-      <button class="close-project" data-id="${p.id}" title="Remove project">×</button>
-    </div>
-  `).join('');
-
-  container.querySelectorAll('.project-tab').forEach(tab => {
-    tab.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('close-project')) {
-        selectProject(tab.dataset.id);
-      }
-    });
-  });
-
-  container.querySelectorAll('.close-project').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (confirm('Remove this project?')) {
-        await DeleteProject(btn.dataset.id);
-        state.projects = state.projects.filter(p => p.id !== btn.dataset.id);
-        if (state.activeProject?.id === btn.dataset.id) {
-          state.activeProject = null;
-          updateWorkspaceInfo();
-        }
-        renderProjectTabs();
-      }
-    });
-  });
-
-  // Re-apply Claude status to all project tabs after render
-  updateAllProjectClaudeStatus();
-}
-
 // Select a project
 export async function selectProject(id) {
   if (state.activeProject?.id === id) return;
@@ -196,14 +152,11 @@ export async function selectProject(id) {
   const success = await switchProject(id);
 
   if (success) {
-    // Update project tabs and workspace info
-    renderProjectTabs();
     updateWorkspaceInfo();
 
     // Update iTerm panel for new project and focus its tab
     renderITermPanel();
     focusProjectTab();
-
   }
 }
 

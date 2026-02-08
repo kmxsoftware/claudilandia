@@ -64,7 +64,9 @@ import {
   GetGlobalPromptCategories,
   CreatePromptCategory,
   DeletePromptCategory,
-  WriteITermText
+  WriteITermText,
+  GetToolsPanelHeight,
+  SetToolsPanelHeight
 } from '../../wailsjs/go/main/App';
 import { registerStateHandler } from './project-switcher.js';
 
@@ -159,6 +161,14 @@ export function setupToolsPanel() {
 
   // Tools panel resizer
   setupToolsPanelResizer();
+
+  // Restore saved panel height
+  GetToolsPanelHeight().then(h => {
+    if (h >= 20 && h <= 70) {
+      toolsState.panelHeight = h;
+      updateToolsPanelHeight();
+    }
+  }).catch(() => {});
 
   // Modal event listeners
   document.getElementById('closeToolsModal')?.addEventListener('click', closeToolsModal);
@@ -314,6 +324,8 @@ function setupToolsPanelResizer() {
 
     const overlay = document.getElementById('toolsResizeOverlay');
     if (overlay) overlay.remove();
+    // Persist panel height globally
+    SetToolsPanelHeight(toolsState.panelHeight);
     // ResizeObserver will handle terminal fit() automatically
   };
 

@@ -1228,6 +1228,31 @@ func (m *Manager) SetTerminalFontSize(size int) {
 	m.Save()
 }
 
+// GetToolsPanelHeight returns the saved tools panel height percentage
+func (m *Manager) GetToolsPanelHeight() float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.state.ToolsPanelHeight < 20 || m.state.ToolsPanelHeight > 70 {
+		return 40 // default
+	}
+	return m.state.ToolsPanelHeight
+}
+
+// SetToolsPanelHeight saves the tools panel height percentage
+func (m *Manager) SetToolsPanelHeight(height float64) {
+	if height < 20 {
+		height = 20
+	}
+	if height > 70 {
+		height = 70
+	}
+	m.mu.Lock()
+	m.state.ToolsPanelHeight = height
+	m.mu.Unlock()
+	m.Save()
+}
+
 // GetWindowState returns the saved window state
 func (m *Manager) GetWindowState() *WindowState {
 	m.mu.RLock()
