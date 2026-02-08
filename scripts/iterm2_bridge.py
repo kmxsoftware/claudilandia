@@ -108,17 +108,18 @@ def resolve_cell_color(color, ansi_palette):
 
 # --- Screen Content Processing ---
 
-def process_screen_contents(contents, ansi_palette):
-    """Convert ScreenContents to wire format (list of lines, each a list of runs)."""
+def process_screen_contents(contents, ansi_palette, cols=80):
+    """Convert ScreenContents to wire format (list of lines, each a list of runs).
+    Replaces NUL bytes in line.string with spaces (iTerm2 uses \\x00 for empty cells)."""
     lines = []
     num_lines = contents.number_of_lines
 
     for i in range(num_lines):
         line = contents.line(i)
-        text = line.string
+        text = line.string.replace('\x00', ' ')
         runs = []
 
-        if not text:
+        if not text.strip():
             lines.append(runs)
             continue
 
@@ -242,7 +243,6 @@ async def stream_session(connection, session_id, ansi_palette):
                 if contents is None or stop_event.is_set():
                     break
 
-                lines = process_screen_contents(contents, ansi_palette)
                 cursor_x = contents.cursor_coord.x
                 cursor_y = contents.cursor_coord.y
 
@@ -252,6 +252,8 @@ async def stream_session(connection, session_id, ansi_palette):
                 except Exception:
                     cols = 80
                     rows = 25
+
+                lines = process_screen_contents(contents, ansi_palette, cols)
 
                 emit({
                     "type": "content",
@@ -339,12 +341,12 @@ async def process_command(connection, cmd_str):
         try:
             initial = await session.async_get_screen_contents()
             if initial:
-                init_lines = process_screen_contents(initial, ansi_palette)
                 try:
                     cols = session.grid_size.width
                     rows = session.grid_size.height
                 except Exception:
                     cols, rows = 80, 25
+                init_lines = process_screen_contents(initial, ansi_palette, cols)
                 emit({
                     "type": "content",
                     "sessionId": session_id,

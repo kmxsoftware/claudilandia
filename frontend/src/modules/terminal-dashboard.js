@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { registerStateHandler } from './project-switcher.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -21,6 +21,8 @@ let dashboardState = {
   currentTheme: 'dracula',   // active theme name
   fontSize: 12,              // active font size
   themeMenuOpen: false,       // dropdown visibility
+  historyLines: null,          // plain text history lines (from scrollback)
+  historyLoading: false,       // loading indicator
 };
 
 // ============================================
@@ -145,6 +147,30 @@ window.itermFocusSession = async function(sessionId) {
     await SwitchITermTabBySessionID(sessionId);
   } catch (err) {
     console.error('Failed to focus session:', err);
+  }
+};
+
+// Load more history lines from scrollback buffer
+window.itermLoadHistory = async function() {
+  if (!dashboardState.viewingSessionId || dashboardState.historyLoading) return;
+
+  dashboardState.historyLoading = true;
+  const btn = document.querySelector('.history-load-btn');
+  if (btn) btn.classList.add('loading');
+
+  try {
+    const contents = await GetITermSessionContentsByID(dashboardState.viewingSessionId, 0);
+    if (contents) {
+      const allLines = contents.split('\n');
+      // Store history lines (the scrollback content above visible screen)
+      dashboardState.historyLines = allLines;
+      updateStyledOutputViewer();
+    }
+  } catch (err) {
+    console.error('Failed to load history:', err);
+  } finally {
+    dashboardState.historyLoading = false;
+    if (btn) btn.classList.remove('loading');
   }
 };
 
@@ -320,6 +346,8 @@ export function stopViewing() {
   dashboardState.termSize = null;
   dashboardState.profileColors = null;
   dashboardState.useStyledMode = false;
+  dashboardState.historyLines = null;
+  dashboardState.historyLoading = false;
   try {
     UnwatchITermSession();
   } catch (err) {
@@ -431,6 +459,20 @@ function updateStyledOutputViewer() {
   const defaultBg = dashboardState.profileColors?.bg || '#000000';
 
   const fragment = document.createDocumentFragment();
+
+  // Prepend scrollback history if loaded
+  if (dashboardState.historyLines && dashboardState.historyLines.length > 0) {
+    for (const histLine of dashboardState.historyLines) {
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'term-line term-history-line';
+      lineDiv.textContent = histLine || '\u00A0';
+      fragment.appendChild(lineDiv);
+    }
+    const sep = document.createElement('div');
+    sep.className = 'term-history-separator';
+    sep.textContent = '── live ──';
+    fragment.appendChild(sep);
+  }
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const lineRuns = lines[lineIdx];
@@ -588,6 +630,7 @@ export function renderTerminalDashboard() {
               `).join('')}
             </div>
             <div class="terminal-controls">
+              ${dashboardState.viewingSessionId ? `<button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button><button class="history-load-btn" onclick="window.itermFocusSession('${dashboardState.viewingSessionId}')" title="Focus in iTerm2">⌖</button>` : ''}
               <div class="terminal-theme-selector">
                 <button class="theme-dot" style="background:${currentThemeObj.color}" onclick="window.itermToggleThemeMenu()" title="Color theme"></button>
                 <div class="theme-menu ${dashboardState.themeMenuOpen ? 'visible' : ''}" id="themeMenu">
@@ -636,9 +679,9 @@ export function renderTerminalDashboard() {
                 <span class="bridge-indicator ${dashboardState.useStyledMode ? 'active' : ''}" title="${dashboardState.useStyledMode ? 'Python bridge (styled)' : 'Not connected'}"></span>
               </div>
               <div class="command-input-bar">
-                <input type="text" id="itermCommandInput" class="command-input"
+                <textarea id="itermCommandInput" class="command-input" rows="3"
                        placeholder="Type command and press Enter..." autocomplete="off" spellcheck="false"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();window.itermSendCommand();}">
+                       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();window.itermSendCommand();}"></textarea>
               </div>
             </div>
           `) : `
@@ -1025,6 +1068,8 @@ function addTerminalDashboardStyles() {
       font-family: 'JetBrains Mono', 'Menlo', 'Monaco', monospace;
       font-size: 12px;
       outline: none;
+      resize: none;
+      line-height: 1.4;
     }
 
     .command-input:focus { border-color: #3b82f6; }
@@ -1091,6 +1136,53 @@ function addTerminalDashboardStyles() {
 
     .bridge-indicator.active {
       background: #22c55e;
+    }
+
+    /* History load button */
+    .history-load-btn {
+      background: none;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #8b949e;
+      font-size: 13px;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .history-load-btn:hover {
+      color: #89b4fa;
+      border-color: #89b4fa;
+    }
+
+    .history-load-btn.loaded {
+      color: #22c55e;
+      border-color: #22c55e;
+    }
+
+    .history-load-btn.loading {
+      opacity: 0.5;
+      cursor: wait;
+    }
+
+    /* History lines in viewer */
+    .term-history-line {
+      opacity: 0.5;
+    }
+
+    .term-history-separator {
+      text-align: center;
+      color: #475569;
+      font-size: 10px;
+      padding: 4px 0;
+      border-bottom: 1px solid #334155;
+      margin-bottom: 4px;
     }
 
     /* Scrollbars */
