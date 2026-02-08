@@ -1190,6 +1190,33 @@ export namespace structure {
 
 }
 
+export namespace teams {
+	
+	export class TeamHistoryEntry {
+	    name: string;
+	    description: string;
+	    createdAt: number;
+	    archivedAt: number;
+	    memberCount: number;
+	    taskCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TeamHistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.createdAt = source["createdAt"];
+	        this.archivedAt = source["archivedAt"];
+	        this.memberCount = source["memberCount"];
+	        this.taskCount = source["taskCount"];
+	    }
+	}
+
+}
+
 export namespace testing {
 	
 	export class CoverageDetail {

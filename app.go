@@ -23,6 +23,7 @@ import (
 	"projecthub/internal/remote"
 	"projecthub/internal/state"
 	"projecthub/internal/structure"
+	"projecthub/internal/teams"
 	"projecthub/internal/terminal"
 	"projecthub/internal/testing"
 
@@ -46,6 +47,8 @@ type App struct {
 	ngrokTunnel      *remote.NgrokTunnel
 	itermController  *iterm.Controller
 	coverageStopChan chan struct{}
+	teamsWatcher     *teams.Watcher
+	teamsStopChan    chan struct{}
 	voiceProcess     *exec.Cmd
 	voiceStdin       io.WriteCloser
 	voiceMu          sync.Mutex
@@ -174,6 +177,14 @@ func (a *App) startup(ctx context.Context) {
 	a.coverageStopChan = make(chan struct{})
 	go a.coverageWatcher.StartPolling(5*time.Second, a.coverageStopChan)
 
+	// Start teams watcher (poll every 3 seconds)
+	a.teamsWatcher = teams.NewWatcher()
+	a.teamsWatcher.SetUpdateCallback(func(allTeams map[string]*teams.TeamSnapshot) {
+		runtime.EventsEmit(a.ctx, "teams-update", allTeams)
+	})
+	a.teamsStopChan = make(chan struct{})
+	go a.teamsWatcher.StartPolling(3*time.Second, a.teamsStopChan)
+
 	// Restore window state after a short delay (needs window to be ready)
 	const windowReadyDelay = 150 * time.Millisecond
 	go func() {
@@ -190,6 +201,10 @@ func (a *App) shutdown(ctx context.Context) {
 	// Stop coverage watcher
 	if a.coverageStopChan != nil {
 		close(a.coverageStopChan)
+	}
+	// Stop teams watcher
+	if a.teamsStopChan != nil {
+		close(a.teamsStopChan)
 	}
 	// Stop iTerm2 polling, content watching, and Python bridge
 	if a.itermController != nil {
@@ -982,6 +997,26 @@ func (a *App) StopVoiceRecognition() {
 		a.voiceProcess.Wait()
 		a.voiceProcess = nil
 	}
+}
+
+// ============================================
+// Agent Teams Methods
+// ============================================
+
+// GetAllTeams returns all currently active teams
+func (a *App) GetAllTeams() map[string]*teams.TeamSnapshot {
+	if a.teamsWatcher == nil {
+		return nil
+	}
+	return a.teamsWatcher.GetAllTeams()
+}
+
+// GetTeamHistory returns archived/past teams
+func (a *App) GetTeamHistory() []teams.TeamHistoryEntry {
+	if a.teamsWatcher == nil {
+		return nil
+	}
+	return a.teamsWatcher.GetHistory()
 }
 
 // ============================================

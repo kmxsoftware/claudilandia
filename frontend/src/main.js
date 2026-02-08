@@ -126,6 +126,12 @@ import {
   initStructureHandler
 } from './modules/structure-panel.jsx';
 
+// Teams dashboard module (tools panel tab)
+import {
+  initTeamsDashboard,
+  renderTeamsDashboard
+} from './modules/teams-dashboard.js';
+
 // iTerm2 integration module (managed in sidebar)
 import {
   initITermPanel
@@ -320,6 +326,9 @@ async function init() {
   // Initialize structure panel
   initStructurePanel();
 
+  // Initialize teams dashboard (tools panel)
+  initTeamsDashboard();
+
   // Load containers if docker available
   if (state.dockerAvailable) {
     refreshContainers();
@@ -476,6 +485,9 @@ function render() {
                 <button class="tools-tab" data-tools-tab="agents">
                   <span class="tools-tab-icon">🤖</span> Agents
                 </button>
+                <button class="tools-tab" data-tools-tab="teams">
+                  <span class="tools-tab-icon">👥</span> Teams
+                </button>
                 <button class="tools-tab" data-tools-tab="commands">
                   <span class="tools-tab-icon">⌨️</span> Commands
                 </button>
@@ -508,6 +520,9 @@ function render() {
               </div>
               <div id="toolsAgentsTab" class="tools-tab-content" style="display:none;">
                 <div class="tools-list" id="agentsList"></div>
+              </div>
+              <div id="toolsTeamsTab" class="tools-tab-content" style="display:none;">
+                <div id="teamsDashboardContainer"></div>
               </div>
               <div id="toolsCommandsTab" class="tools-tab-content" style="display:none;">
                 <div class="tools-list" id="commandsList"></div>

@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { marked } from 'marked';
 import { createModuleLogger } from './logger.js';
+import { renderTeamsDashboard } from './teams-dashboard.js';
 
 const logger = createModuleLogger('ToolsPanel');
 import {
@@ -186,6 +187,7 @@ export function setupToolsPanel() {
 const TAB_ICONS = {
   prompts: '💬',
   agents: '🤖',
+  teams: '👥',
   commands: '⌨️',
   skills: '⚡',
   hooks: '🪝',
@@ -197,6 +199,7 @@ const TAB_ICONS = {
 const TAB_LABELS = {
   prompts: 'Prompts',
   agents: 'Agents',
+  teams: 'Teams',
   commands: 'Commands',
   skills: 'Skills',
   hooks: 'Hooks',
@@ -369,6 +372,9 @@ export function renderToolsPanel() {
       break;
     case 'claudemd':
       renderClaudemdTab();
+      break;
+    case 'teams':
+      renderTeamsTab();
       break;
   }
 }
@@ -2660,6 +2666,14 @@ async function doInstallHook(hookName) {
 }
 
 // Render CLAUDE.md editor tab
+// ============================================
+// Teams Tab
+// ============================================
+
+function renderTeamsTab() {
+  renderTeamsDashboard();
+}
+
 async function renderClaudemdTab() {
   const container = document.getElementById('claudemdEditor');
   if (!container) return;

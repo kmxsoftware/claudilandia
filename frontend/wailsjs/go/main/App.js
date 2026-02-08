@@ -122,6 +122,10 @@ export function GetAgentContent(arg1) {
   return window['go']['main']['App']['GetAgentContent'](arg1);
 }
 
+export function GetAllTeams() {
+  return window['go']['main']['App']['GetAllTeams']();
+}
+
 export function GetAllTestSummaries() {
   return window['go']['main']['App']['GetAllTestSummaries']();
 }
@@ -316,6 +320,10 @@ export function GetScreenshots(arg1) {
 
 export function GetState() {
   return window['go']['main']['App']['GetState']();
+}
+
+export function GetTeamHistory() {
+  return window['go']['main']['App']['GetTeamHistory']();
 }
 
 export function GetTemplateAgents() {

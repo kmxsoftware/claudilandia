@@ -4,6 +4,7 @@ import {remote} from '../models';
 import {state} from '../models';
 import {claude} from '../models';
 import {main} from '../models';
+import {teams} from '../models';
 import {testing} from '../models';
 import {docker} from '../models';
 import {git} from '../models';
@@ -69,6 +70,8 @@ export function FocusITerm():Promise<void>;
 export function GetActiveProject():Promise<string>;
 
 export function GetAgentContent(arg1:string):Promise<string>;
+
+export function GetAllTeams():Promise<Record<string, teams.TeamSnapshot>>;
 
 export function GetAllTestSummaries():Promise<Record<string, testing.TestSummary>>;
 
@@ -167,6 +170,8 @@ export function GetRemoteAccessStatus():Promise<main.RemoteAccessStatus>;
 export function GetScreenshots(arg1:string):Promise<Array<main.Screenshot>>;
 
 export function GetState():Promise<state.AppState>;
+
+export function GetTeamHistory():Promise<Array<teams.TeamHistoryEntry>>;
 
 export function GetTemplateAgents():Promise<Array<claude.TemplateItem>>;
 
