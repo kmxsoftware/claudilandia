@@ -6159,3 +6159,8 @@ body.wails-fullscreen .titlebar-drag-region {
 .dashboard-fullscreen #toolsPanelResizer {
   display: none !important;
 }
+
+/* Show panel-tabs when diff tab is active in fullscreen */
+.dashboard-fullscreen .panel-tabs:has(.diff-tab:not(.hidden)) {
+  display: flex !important;
+}
