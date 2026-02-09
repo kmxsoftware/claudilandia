@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
 import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen, SaveScreenshot } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -30,6 +30,8 @@ let dashboardState = {
   voiceAutoSubmit: true,      // send to terminal on stop or fill input
   voiceConfigOpen: false,     // config dropdown visible
   fullscreen: false,           // fullscreen mode (hide sidebars/tools)
+  pastedImagePath: null,       // absolute path of pasted screenshot on disk
+  pastedImageBase64: null,     // base64 data URI for thumbnail preview
 };
 
 // ============================================
@@ -329,15 +331,95 @@ window.itermSendCommand = async function() {
   const input = document.getElementById('itermCommandInput');
   if (!input || !dashboardState.viewingSessionId) return;
 
-  const text = input.value.trim();
-  if (!text) return;
+  let text = input.value.trim();
+  const imagePath = dashboardState.pastedImagePath;
+
+  if (!text && !imagePath) return;
+
+  // Append image path if attached
+  if (imagePath) {
+    text = text ? text + '\n\n[Image: ' + imagePath + ']' : 'Look at this image: ' + imagePath;
+  }
 
   try {
     await WriteITermTextBySessionID(dashboardState.viewingSessionId, text, true);
     input.value = '';
+    // Clear attached image
+    dashboardState.pastedImagePath = null;
+    dashboardState.pastedImageBase64 = null;
+    updatePastedImagePreview();
   } catch (err) {
     console.error('Failed to send command:', err);
   }
+};
+
+// Handle clipboard paste with image detection
+async function handleClipboardPaste(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  for (const item of items) {
+    if (item.type === 'image/png' || item.type === 'image/jpeg') {
+      e.preventDefault();
+
+      const blob = item.getAsFile();
+      if (!blob) return;
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Full = reader.result; // data:image/png;base64,xxxxx
+        const base64Data = base64Full.split(',')[1];
+
+        const projectID = state.activeProject?.id;
+        if (!projectID) return;
+
+        const filename = `clipboard_${Date.now()}.png`;
+        try {
+          const savedPath = await SaveScreenshot(projectID, base64Data, filename);
+          dashboardState.pastedImagePath = savedPath;
+          dashboardState.pastedImageBase64 = base64Full;
+          updatePastedImagePreview();
+        } catch (err) {
+          console.error('Failed to save pasted image:', err);
+        }
+      };
+      reader.readAsDataURL(blob);
+      return;
+    }
+  }
+}
+
+// Update pasted image preview without full re-render
+function updatePastedImagePreview() {
+  let preview = document.getElementById('pastedImagePreview');
+
+  if (!dashboardState.pastedImagePath) {
+    if (preview) preview.style.display = 'none';
+    return;
+  }
+
+  if (!preview) {
+    const inputBar = document.querySelector('.command-input-bar');
+    if (!inputBar) return;
+    preview = document.createElement('div');
+    preview.id = 'pastedImagePreview';
+    preview.className = 'pasted-image-preview';
+    inputBar.parentNode.insertBefore(preview, inputBar);
+  }
+
+  const filename = dashboardState.pastedImagePath.split('/').pop();
+  preview.style.display = 'flex';
+  preview.innerHTML = `
+    <img src="${dashboardState.pastedImageBase64}" class="pasted-image-thumb" alt="Screenshot" />
+    <span class="pasted-image-name">${filename}</span>
+    <button class="pasted-image-remove" onclick="window.itermRemovePastedImage()" title="Remove image">&times;</button>
+  `;
+}
+
+window.itermRemovePastedImage = function() {
+  dashboardState.pastedImagePath = null;
+  dashboardState.pastedImageBase64 = null;
+  updatePastedImagePreview();
 };
 
 window.itermSendKey = async function(key) {
@@ -980,6 +1062,13 @@ export function renderTerminalDashboard() {
                   <button id="voiceStopBtn" class="voice-action-btn voice-stop-btn" onclick="window.itermVoiceStop()" ${dashboardState.voiceState !== 'listening' ? 'disabled' : ''}>Stop & Send</button>
                 </div>
               </div>
+              <div id="pastedImagePreview" class="pasted-image-preview" style="display:${dashboardState.pastedImagePath ? 'flex' : 'none'}">
+                ${dashboardState.pastedImagePath ? `
+                  <img src="${dashboardState.pastedImageBase64 || ''}" class="pasted-image-thumb" alt="Screenshot" />
+                  <span class="pasted-image-name">${(dashboardState.pastedImagePath || '').split('/').pop()}</span>
+                  <button class="pasted-image-remove" onclick="window.itermRemovePastedImage()" title="Remove image">&times;</button>
+                ` : ''}
+              </div>
               <div class="command-input-bar">
                 <textarea id="itermCommandInput" class="command-input" rows="3"
                        placeholder="Type command and press Enter..." autocomplete="off" spellcheck="false"
@@ -1039,10 +1128,13 @@ export function renderTerminalDashboard() {
     });
   }
 
-  // Auto-focus command input when a terminal is active
+  // Auto-focus command input and attach paste handler when a terminal is active
   if (dashboardState.viewingSessionId) {
     const cmdInput = document.getElementById('itermCommandInput');
-    if (cmdInput) cmdInput.focus();
+    if (cmdInput) {
+      cmdInput.focus();
+      cmdInput.addEventListener('paste', handleClipboardPaste);
+    }
   }
 }
 
@@ -1393,6 +1485,54 @@ function addTerminalDashboardStyles() {
 
     .command-input:focus { border-color: #3b82f6; }
     .command-input::placeholder { color: #475569; }
+
+    .pasted-image-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #1a2332;
+      border-top: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    .pasted-image-thumb {
+      height: 48px;
+      max-width: 120px;
+      object-fit: contain;
+      border-radius: 4px;
+      border: 1px solid #334155;
+    }
+    .pasted-image-name {
+      flex: 1;
+      color: #94a3b8;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', 'Menlo', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pasted-image-remove {
+      background: none;
+      border: 1px solid #475569;
+      color: #94a3b8;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .pasted-image-remove:hover {
+      background: #ef4444;
+      border-color: #ef4444;
+      color: white;
+    }
 
     .create-first-btn {
       margin-top: 12px;
