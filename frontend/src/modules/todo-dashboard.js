@@ -536,7 +536,7 @@ function addTodoDashboardStyles() {
 
     .sidebar-todo-text {
       flex: 1;
-      font-size: 12px;
+      font-size: 14px;
       color: #e2e8f0;
       cursor: default;
       word-break: break-word;

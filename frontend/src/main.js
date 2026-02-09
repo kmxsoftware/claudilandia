@@ -352,19 +352,17 @@ function render() {
       <div class="main-content">
         <!-- Sidebar -->
         <div class="sidebar">
-          <div class="sidebar-section">
-            <h3>Workspace</h3>
-            <div id="workspaceInfo" class="workspace-info">
-              <p class="no-project">No project selected</p>
+          <div class="sidebar-section projects-section">
+            <div class="projects-header">
+              <h3>Projects</h3>
+              <div class="projects-header-actions">
+                <button class="small-btn" onclick="window.openAddProjectModal()" title="Add Project">+</button>
+                <button class="small-btn" onclick="window.itermRefreshDashboard()" title="Refresh">↻</button>
+                <button class="small-btn fullscreen-toggle-btn" onclick="window.itermToggleFullscreen()" title="Toggle fullscreen">${'⤢'}</button>
+              </div>
             </div>
-          </div>
-
-          <div class="sidebar-section">
-            <h3>Quick Actions</h3>
-            <div class="quick-actions">
-              <button id="dockerBtn" class="action-btn ${state.dockerAvailable ? '' : 'disabled'}">
-                <span class="icon">🐳</span> Docker
-              </button>
+            <div id="projectsList" class="projects-list">
+              <!-- Rendered by terminal-dashboard.js -->
             </div>
           </div>
 
@@ -388,16 +386,11 @@ function render() {
 
         <!-- Main Panel -->
         <div class="main-panel">
-          <!-- Tab Bar (for special tabs like diff/docker) -->
+          <!-- Tab Bar (for special tabs like diff) -->
           <div class="panel-tabs">
             <button class="panel-tab diff-tab hidden" data-tab="diff" id="diffTab">
               <span class="diff-tab-name">file.js</span>
               <span class="diff-tab-close" id="closeDiffTab">×</span>
-            </button>
-            <button class="panel-tab docker-tab hidden" data-tab="docker" id="dockerTab">
-              <span class="docker-tab-icon">🐳</span>
-              <span>Docker</span>
-              <span class="docker-tab-close" id="closeDockerTab">×</span>
             </button>
             <div class="panel-tabs-spacer"></div>
           </div>
@@ -435,25 +428,24 @@ function render() {
                 <div class="remote-access-panel" id="remoteAccessPanel" style="display: none;">
                   <!-- Content rendered by remote-access.js -->
                 </div>
-              </div>
-            </div>
 
-            <!-- NOTE: Terminal panel removed - using iTerm2 integration -->
-
-            <div id="dockerPanel" class="tab-panel">
-              <div class="docker-content">
-                ${state.dockerAvailable ? `
-                  <div class="docker-header">
-                    <h3>Containers</h3>
-                    <button id="refreshContainers" class="small-btn">🔄 Refresh</button>
+                <!-- Docker Panel -->
+                <div class="docker-panel" id="dockerPanel" style="display: none;">
+                  <div class="docker-content">
+                    ${state.dockerAvailable ? `
+                      <div class="docker-header">
+                        <h3>Containers</h3>
+                        <button id="refreshContainers" class="small-btn">🔄 Refresh</button>
+                      </div>
+                      <div id="containerList" class="container-list"></div>
+                    ` : `
+                      <div class="empty-state">
+                        <p>🐳 Docker is not available</p>
+                        <p class="hint">Make sure Docker Desktop is running</p>
+                      </div>
+                    `}
                   </div>
-                  <div id="containerList" class="container-list"></div>
-                ` : `
-                  <div class="empty-state">
-                    <p>🐳 Docker is not available</p>
-                    <p class="hint">Make sure Docker Desktop is running</p>
-                  </div>
-                `}
+                </div>
               </div>
             </div>
 
@@ -711,13 +703,6 @@ function setupEventListeners() {
     });
   });
 
-  // Docker button
-  document.getElementById('dockerBtn').addEventListener('click', () => {
-    if (state.dockerAvailable) {
-      openDockerTab();
-    }
-  });
-
   // Refresh containers
   const refreshBtn = document.getElementById('refreshContainers');
   if (refreshBtn) {
@@ -741,12 +726,6 @@ function setupEventListeners() {
   document.getElementById('closeDiffTab')?.addEventListener('click', (e) => {
     e.stopPropagation();
     closeDiffTab();
-  });
-
-  // Close docker tab
-  document.getElementById('closeDockerTab')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeDockerTab();
   });
 
   // Sidebar resizers
@@ -904,49 +883,24 @@ function closeDiffTab() {
   }
 }
 
-function openDockerTab() {
-  const dockerTab = document.getElementById('dockerTab');
-  if (dockerTab) {
-    dockerTab.classList.remove('hidden');
-  }
-  switchTab('docker');
-  refreshContainers();
-}
-
-function closeDockerTab() {
-  const dockerTab = document.getElementById('dockerTab');
-  if (dockerTab) dockerTab.classList.add('hidden');
-
-  if (state.activeTab === 'docker') {
-    switchTab('terminal');
-  }
-}
-
 function switchTab(tabName) {
   state.activeTab = tabName;
 
   const browserPanel = document.getElementById('browserPanel');
-  const dockerPanel = document.getElementById('dockerPanel');
   const diffPanel = document.getElementById('diffPanel');
 
-  // Update active state on special tabs (diff, docker)
+  // Update active state on special tabs (diff)
   document.querySelectorAll('.panel-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.tab === tabName);
   });
 
-  // Handle special tabs (diff, docker) vs main browser panel
+  // Handle special tabs (diff) vs main browser panel
   if (tabName === 'diff') {
     browserPanel.classList.remove('active');
-    dockerPanel.classList.remove('active');
     diffPanel.classList.add('active');
-  } else if (tabName === 'docker') {
-    browserPanel.classList.remove('active');
-    diffPanel.classList.remove('active');
-    dockerPanel.classList.add('active');
   } else {
     // Show browser panel (full width)
     browserPanel.classList.add('active');
-    dockerPanel.classList.remove('active');
     diffPanel.classList.remove('active');
   }
 

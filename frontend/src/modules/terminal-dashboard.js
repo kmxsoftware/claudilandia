@@ -29,6 +29,7 @@ let dashboardState = {
   voiceLang: 'en-US',         // en-US | pl-PL
   voiceAutoSubmit: true,      // send to terminal on stop or fill input
   voiceConfigOpen: false,     // config dropdown visible
+  fullscreen: false,           // fullscreen mode (hide sidebars/tools)
 };
 
 // ============================================
@@ -192,6 +193,17 @@ window.itermSendText = async function(text) {
   } catch (err) {
     console.error('Failed to send text:', err);
   }
+};
+
+// Toggle fullscreen mode - hide everything except projects, terminal, and right sidebar
+window.itermToggleFullscreen = function() {
+  dashboardState.fullscreen = !dashboardState.fullscreen;
+  const cls = document.querySelector('.app-container')?.classList;
+  if (!cls) return;
+  cls.toggle('dashboard-fullscreen', dashboardState.fullscreen);
+  // Update button icon
+  const btn = document.querySelector('.fullscreen-toggle-btn');
+  if (btn) btn.textContent = dashboardState.fullscreen ? '⊗' : '⤢';
 };
 
 // Focus iTerm2 on a specific session
@@ -823,34 +835,29 @@ export function renderTerminalDashboard() {
   const viewingTab = allTabs.find(t => t.sessionId === dashboardState.viewingSessionId);
   const currentThemeObj = getThemeByName(dashboardState.currentTheme);
 
-  panel.innerHTML = `
-    <div class="terminal-dashboard split-view">
-      <!-- Left: Project list -->
-      <div class="dashboard-card projects-card">
-        <div class="card-header">
-          <span class="card-title">Projects</span>
-          <button class="term-refresh-btn" onclick="window.openAddProjectModal()" title="Add Project">+</button>
-          <button class="term-refresh-btn" onclick="window.itermRefreshDashboard()" title="Refresh">↻</button>
-        </div>
-        <div class="card-content terminal-list-content">
-          ${groups.length > 0 ? `
-            <div class="terminal-list">
-              ${groups.map(g => `
-                <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
-                     onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
-                  ${g.icon ? `<span class="project-icon">${g.icon}</span>` : ''}
-                  <span class="terminal-list-name">${escapeHtml(g.name)}</span>
-                  ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length}</span>` : ''}
-                </div>
-              `).join('')}
-            </div>
-          ` : `
-            <div class="no-terminals">No terminals open in iTerm2</div>
-          `}
-        </div>
+  // Render projects list in left sidebar
+  const projectsList = document.getElementById('projectsList');
+  if (projectsList) {
+    projectsList.innerHTML = groups.length > 0 ? `
+      <div class="terminal-list">
+        ${groups.map(g => `
+          <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
+               onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
+            ${g.icon ? `<span class="project-icon">${g.icon}</span>` : ''}
+            <span class="terminal-list-name">${escapeHtml(g.name)}</span>
+            ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length}</span>` : ''}
+          </div>
+        `).join('')}
       </div>
+    ` : `<div class="no-terminals">No terminals open in iTerm2</div>`;
+  }
 
-      <!-- Right: Terminal tabs + output -->
+  // Update fullscreen button state
+  const fsBtn = document.querySelector('.fullscreen-toggle-btn');
+  if (fsBtn) fsBtn.textContent = dashboardState.fullscreen ? '⊗' : '⤢';
+
+  panel.innerHTML = `
+    <div class="terminal-dashboard">
       <div class="dashboard-card output-card">
         ${selectedGroup ? `
           <!-- Terminal tabs bar -->
@@ -868,9 +875,14 @@ export function renderTerminalDashboard() {
             </div>
             <div class="terminal-controls">
               ${dashboardState.viewingSessionId ? `
-                <button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button>
                 <button class="history-load-btn" onclick="window.itermFocusSession('${dashboardState.viewingSessionId}')" title="Focus in iTerm2">⌖</button>
+                <button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button>
               ` : ''}
+              <div class="terminal-font-controls">
+                <button class="font-size-btn" onclick="window.itermFontSize(-1)">-</button>
+                <span class="font-size-value">${dashboardState.fontSize}</span>
+                <button class="font-size-btn" onclick="window.itermFontSize(1)">+</button>
+              </div>
               <div class="terminal-theme-selector">
                 <button class="theme-dot" style="background:${currentThemeObj.color}" onclick="window.itermToggleThemeMenu()" title="Color theme"></button>
                 <div class="theme-menu ${dashboardState.themeMenuOpen ? 'visible' : ''}" id="themeMenu">
@@ -881,11 +893,6 @@ export function renderTerminalDashboard() {
                     </button>
                   `).join('')}
                 </div>
-              </div>
-              <div class="terminal-font-controls">
-                <button class="font-size-btn" onclick="window.itermFontSize(-1)">-</button>
-                <span class="font-size-value">${dashboardState.fontSize}</span>
-                <button class="font-size-btn" onclick="window.itermFontSize(1)">+</button>
               </div>
             </div>
             ${isRealProject ? `<button class="term-add-btn" onclick="window.itermCreateTab()" title="New Terminal">+</button>` : ''}
@@ -1047,10 +1054,6 @@ function addTerminalDashboardStyles() {
       overflow: hidden;
     }
 
-    .terminal-dashboard.split-view {
-      grid-template-columns: 220px 1fr;
-    }
-
     /* Cards */
     .dashboard-card {
       background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
@@ -1081,8 +1084,8 @@ function addTerminalDashboardStyles() {
 
     .card-count {
       font-size: 11px;
-      color: #64748b;
-      background: #334155;
+      color: #e2e8f0;
+      background: rgba(137, 180, 250, 0.2);
       padding: 2px 8px;
       border-radius: 12px;
       flex-shrink: 0;
@@ -1090,49 +1093,46 @@ function addTerminalDashboardStyles() {
 
     .card-content { padding: 12px; }
 
-    /* Project list (left) */
-    .projects-card {
-      min-height: 0;
-    }
-
-    .terminal-list-content {
-      overflow-y: auto;
-      flex: 1;
-      min-height: 0;
-    }
-
+    /* Project list (sidebar) */
     .terminal-list {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .terminal-list-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
-      background: #0f172a;
+      padding: 9px 12px;
+      background: rgba(205, 214, 244, 0.04);
       border-radius: 8px;
       cursor: pointer;
-      border: 1px solid transparent;
+      border: 1px solid rgba(205, 214, 244, 0.06);
+      border-left: 3px solid transparent;
       transition: all 0.15s;
     }
 
     .terminal-list-item:hover {
-      background: #1e293b;
-      border-color: #475569;
+      background: rgba(205, 214, 244, 0.08);
+      border-color: rgba(205, 214, 244, 0.12);
+      border-left-color: rgba(137, 180, 250, 0.4);
     }
 
     .terminal-list-item.viewing {
-      background: #1e3a5f;
-      border-color: #3b82f6;
+      background: rgba(137, 180, 250, 0.1);
+      border-color: rgba(137, 180, 250, 0.2);
+      border-left-color: #89b4fa;
+    }
+
+    .terminal-list-item.viewing .terminal-list-name {
+      color: #fff;
     }
 
     .terminal-list-name {
       flex: 1;
-      font-size: 13px;
-      color: #e2e8f0;
+      font-size: 14px;
+      color: #cdd6f4;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1144,7 +1144,7 @@ function addTerminalDashboardStyles() {
     }
 
     .no-terminals {
-      color: #64748b;
+      color: #6c7086;
       font-size: 13px;
       text-align: center;
       padding: 20px;
@@ -1225,6 +1225,7 @@ function addTerminalDashboardStyles() {
     }
 
     .term-add-btn {
+      margin-left: 8px;
       width: 26px;
       height: 26px;
       padding: 0;

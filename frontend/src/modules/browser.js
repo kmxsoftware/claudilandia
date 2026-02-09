@@ -15,6 +15,9 @@ import { showRemoteAccessPanel, hideRemoteAccessPanel } from './remote-access.js
 // Remote Access tab ID
 export const REMOTE_TAB_ID = 'remote-tab';
 
+// Docker tab ID
+export const DOCKER_TAB_ID = 'docker-tab';
+
 const logger = createModuleLogger('Browser');
 
 // Callbacks set by main.js
@@ -52,6 +55,7 @@ export function renderBrowserTabs() {
   const isGitActive = state.browser.activeTabId === GIT_TAB_ID;
   const isQAActive = state.browser.activeTabId === QA_TAB_ID;
   const isStructureActive = state.browser.activeTabId === STRUCTURE_TAB_ID;
+  const isDockerActive = state.browser.activeTabId === DOCKER_TAB_ID;
   const isRemoteActive = state.browser.activeTabId === REMOTE_TAB_ID;
 
   tabsBar.innerHTML = `
@@ -72,6 +76,10 @@ export function renderBrowserTabs() {
         <span class="tab-icon">🗂️</span>
         <span class="tab-title">Structure</span>
       </div>
+      <div class="browser-tab docker-tab ${isDockerActive ? 'active' : ''}" data-tab-id="${DOCKER_TAB_ID}">
+        <span class="tab-icon">🐳</span>
+        <span class="tab-title">Docker</span>
+      </div>
       <div class="browser-tab remote-tab ${isRemoteActive ? 'active' : ''}" data-tab-id="${REMOTE_TAB_ID}">
         <span class="tab-icon">📱</span>
         <span class="tab-title">Remote</span>
@@ -91,6 +99,8 @@ export function renderBrowserTabs() {
         switchToQATab();
       } else if (tabId === STRUCTURE_TAB_ID) {
         switchToStructureTabLocal();
+      } else if (tabId === DOCKER_TAB_ID) {
+        switchToDockerTab();
       } else if (tabId === REMOTE_TAB_ID) {
         switchToRemoteTab();
       }
@@ -106,6 +116,7 @@ export function switchToDashboardTab() {
   showGitPanel(false);
   showQAPanel(false);
   showStructurePanel(false);
+  showDockerPanel(false);
   showRemotePanel(false);
   hideRemoteAccessPanel();
 
@@ -130,6 +141,7 @@ export function switchToGitTab() {
   showDashboardPanel(false);
   showQAPanel(false);
   showStructurePanel(false);
+  showDockerPanel(false);
   showRemotePanel(false);
   hideRemoteAccessPanel();
 
@@ -152,6 +164,7 @@ export function switchToQATab() {
   showDashboardPanel(false);
   showGitPanel(false);
   showStructurePanel(false);
+  showDockerPanel(false);
   showRemotePanel(false);
   hideRemoteAccessPanel();
 
@@ -175,6 +188,7 @@ function switchToStructureTabLocal() {
   showDashboardPanel(false);
   showGitPanel(false);
   showQAPanel(false);
+  showDockerPanel(false);
   showRemotePanel(false);
   hideRemoteAccessPanel();
 
@@ -187,6 +201,37 @@ function switchToStructureTabLocal() {
 }
 
 // Switch to the Remote tab (Remote Access from iPhone)
+// Switch to the Docker tab
+export function switchToDockerTab() {
+  state.browser.activeTabId = DOCKER_TAB_ID;
+
+  // Stop watching terminal output when leaving dashboard
+  stopViewing();
+
+  // Hide other panels
+  showDashboardPanel(false);
+  showGitPanel(false);
+  showQAPanel(false);
+  showStructurePanel(false);
+  showRemotePanel(false);
+  hideRemoteAccessPanel();
+
+  // Show Docker panel
+  showDockerPanel(true);
+
+  // Update tabs UI
+  renderBrowserTabs();
+  updateBrowserStatusBar();
+}
+
+// Show/hide Docker panel
+export function showDockerPanel(show) {
+  const panel = document.getElementById('dockerPanel');
+  if (panel) {
+    panel.style.display = show ? 'flex' : 'none';
+  }
+}
+
 export function switchToRemoteTab() {
   state.browser.activeTabId = REMOTE_TAB_ID;
 
@@ -198,6 +243,7 @@ export function switchToRemoteTab() {
   showGitPanel(false);
   showQAPanel(false);
   showStructurePanel(false);
+  showDockerPanel(false);
 
   // Show Remote panel and render content
   showRemotePanel(true);
@@ -228,6 +274,8 @@ export function loadBrowserTabs(tabs, activeTabId) {
     switchToGitTab();
   } else if (state.browser.activeTabId === STRUCTURE_TAB_ID) {
     switchToStructureTabLocal();
+  } else if (state.browser.activeTabId === DOCKER_TAB_ID) {
+    switchToDockerTab();
   } else if (state.browser.activeTabId === REMOTE_TAB_ID) {
     switchToRemoteTab();
   } else {
