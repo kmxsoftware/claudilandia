@@ -6,6 +6,7 @@ Protocol: JSON lines on stdin (commands) and stdout (responses).
 
 Commands (stdin):
   {"cmd":"watch","sessionId":"xxx"}  - Start streaming styled content
+  {"cmd":"history","sessionId":"xxx"} - Fetch styled scrollback history
   {"cmd":"stop"}                      - Stop current streaming
   {"cmd":"quit"}                      - Shutdown bridge
 
@@ -13,6 +14,7 @@ Responses (stdout):
   {"type":"ready"}
   {"type":"profile","sessionId":"xxx","colors":{...}}
   {"type":"content","sessionId":"xxx","lines":[...],"cursor":{...},"cols":N,"rows":N}
+  {"type":"history","sessionId":"xxx","lines":[...]}
   {"type":"error","message":"xxx"}
   {"type":"stopped"}
 """
@@ -107,6 +109,48 @@ def resolve_cell_color(color, ansi_palette):
 
 
 # --- Screen Content Processing ---
+
+def process_line_contents(line_contents_list, ansi_palette, cols=80):
+    """Convert List[LineContents] (from async_get_contents) to wire format.
+    Each LineContents has .string, .string_at(x), .style_at(x)."""
+    lines = []
+    for line in line_contents_list:
+        text = line.string.replace('\x00', ' ')
+        runs = []
+
+        if not text.strip():
+            lines.append(runs)
+            continue
+
+        current_text = ""
+        current_style = None
+
+        for x in range(len(text)):
+            char = text[x]
+            style = line.style_at(x)
+            style_dict = style_to_dict(style, ansi_palette) if style else {}
+
+            if style_dict == current_style:
+                current_text += char
+            else:
+                if current_text:
+                    run = {"t": current_text}
+                    if current_style:
+                        run.update(current_style)
+                    runs.append(run)
+                current_text = char
+                current_style = style_dict
+
+        if current_text:
+            run = {"t": current_text}
+            if current_style:
+                run.update(current_style)
+            runs.append(run)
+
+        lines.append(runs)
+
+    return lines
+
 
 def process_screen_contents(contents, ansi_palette, cols=80):
     """Convert ScreenContents to wire format (list of lines, each a list of runs).
@@ -362,6 +406,53 @@ async def process_command(connection, cmd_str):
         streaming_task = asyncio.create_task(
             stream_session(connection, session_id, ansi_palette)
         )
+
+    elif action == "history":
+        session_id = cmd.get("sessionId")
+        if not session_id:
+            emit_error("Missing sessionId")
+            return False
+
+        app = await iterm2.async_get_app(connection)
+        session = app.get_session_by_id(session_id)
+        if not session:
+            emit_error(f"Session not found: {session_id}")
+            return False
+
+        try:
+            profile = await session.async_get_profile()
+            palette = get_profile_colors(profile)
+            ansi_palette = palette["ansi"]
+
+            try:
+                cols = session.grid_size.width
+            except Exception:
+                cols = 80
+
+            line_info = await session.async_get_line_info()
+            scrollback_count = line_info.scrollback_buffer_height
+            overflow = line_info.overflow
+
+            if scrollback_count > 0:
+                # async_get_contents returns List[LineContents]
+                # first_line must be >= overflow
+                history_line_contents = await session.async_get_contents(
+                    overflow, scrollback_count
+                )
+                history_lines = process_line_contents(history_line_contents, ansi_palette, cols)
+                emit({
+                    "type": "history",
+                    "sessionId": session_id,
+                    "lines": history_lines,
+                })
+            else:
+                emit({
+                    "type": "history",
+                    "sessionId": session_id,
+                    "lines": [],
+                })
+        except Exception as e:
+            emit_error(f"History fetch failed: {e}")
 
     return False
 

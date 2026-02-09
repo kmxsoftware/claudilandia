@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { marked } from 'marked';
 import { createModuleLogger } from './logger.js';
-import { renderTeamsDashboard } from './teams-dashboard.js';
+import { renderTeamsDashboard, startTeamsTab, stopTeamsTab } from './teams-dashboard.js';
 
 const logger = createModuleLogger('ToolsPanel');
 import {
@@ -188,7 +188,6 @@ const TAB_ICONS = {
   prompts: '💬',
   agents: '🤖',
   teams: '👥',
-  commands: '⌨️',
   skills: '⚡',
   hooks: '🪝',
   mcp: '🔌',
@@ -200,7 +199,6 @@ const TAB_LABELS = {
   prompts: 'Prompts',
   agents: 'Agents',
   teams: 'Teams',
-  commands: 'Commands',
   skills: 'Skills',
   hooks: 'Hooks',
   mcp: 'MCP',
@@ -209,6 +207,15 @@ const TAB_LABELS = {
 };
 
 export function switchToolsTab(tabName) {
+  // Stop teams polling when leaving teams tab
+  if (toolsState.activeTab === 'teams' && tabName !== 'teams') {
+    stopTeamsTab();
+  }
+  // Start teams polling when entering teams tab
+  if (tabName === 'teams' && toolsState.activeTab !== 'teams') {
+    startTeamsTab();
+  }
+
   toolsState.activeTab = tabName;
 
   // Update tab buttons
@@ -354,9 +361,6 @@ export function renderToolsPanel() {
       break;
     case 'agents':
       renderAgentsTab();
-      break;
-    case 'commands':
-      renderCommandsTab();
       break;
     case 'libs':
       renderLibsTab();
@@ -1250,74 +1254,130 @@ async function renderSkillsTab() {
   }
 
   try {
-    // Load installed skills
+    // Load skills (directory-based)
     const installedSkills = await GetInstalledSkills(state.activeProject.path);
-    const installedSet = new Set(installedSkills);
+    const installedSkillSet = new Set(installedSkills);
 
-    // Load template skills from repo
+    // Load commands (file-based, now part of skills)
+    const projectCommands = await GetProjectCommands(state.activeProject.path);
+    const globalCommands = await GetGlobalCommands();
+    toolsState.commands = [...projectCommands, ...globalCommands];
+
+    // Load templates
     const templateSkills = await GetTemplateSkills();
-    const availableTemplates = templateSkills.filter(t => !installedSet.has(t.name));
+    const templateCommands = await GetTemplateCommands();
+    const allInstalledNames = new Set([
+      ...installedSkills,
+      ...toolsState.commands.map(c => c.name),
+    ]);
+    const availableSkillTemplates = templateSkills.filter(t => !allInstalledNames.has(t.name));
+    const availableCommandTemplates = templateCommands.filter(t => !allInstalledNames.has(t.name));
 
     let html = '';
 
-    // Installed skills section
+    // Header with create button
+    html += `
+      <div class="tools-header-row">
+        <span class="tools-header-title">Skills & Commands</span>
+        <button class="tools-item-btn create-command-btn">+ New</button>
+      </div>
+    `;
+
+    // Installed skills section (directory-based)
     if (installedSkills.length > 0) {
       html += `
-        <div class="tools-section-header">Installed Skills</div>
+        <div class="tools-section-header">Skills</div>
         ${installedSkills.map(skillName => `
           <div class="tools-item" data-skill="${skillName}">
             <div class="tools-item-info">
               <span class="tools-item-status">⚡</span>
               <div class="tools-item-details">
-                <span class="tools-item-name">${skillName}</span>
-                <span class="tools-item-description">Installed in project</span>
+                <span class="tools-item-name">/${skillName}</span>
+                <span class="tools-item-description">Installed skill</span>
               </div>
-              <span class="tools-item-badge installed">Installed</span>
-            </div>
-            <div class="tools-item-actions">
-              <button class="tools-item-btn" disabled>Installed</button>
+              <span class="tools-item-badge installed">Skill</span>
             </div>
           </div>
         `).join('')}
       `;
     }
 
-    // Available templates section
-    if (availableTemplates.length > 0) {
+    // Installed commands section (file-based slash commands)
+    if (toolsState.commands.length > 0) {
+      html += `
+        <div class="tools-section-header">Slash Commands</div>
+        ${toolsState.commands.map(cmd => `
+          <div class="tools-item" data-command-path="${cmd.path}">
+            <div class="tools-item-info">
+              <span class="tools-item-status">⌨️</span>
+              <div class="tools-item-details">
+                <span class="tools-item-name">/${cmd.isGlobal ? '' : 'project:'}${cmd.name}</span>
+                <span class="tools-item-description">${cmd.description || 'No description'}</span>
+              </div>
+              ${cmd.isGlobal ? '<span class="tools-item-badge global">Global</span>' : '<span class="tools-item-badge">Project</span>'}
+            </div>
+            <div class="tools-item-actions">
+              <button class="tools-item-btn view-command-btn" data-path="${cmd.path}">View</button>
+              <button class="tools-item-btn edit-command-btn" data-path="${cmd.path}">Edit</button>
+              ${!cmd.isGlobal ? `<button class="tools-item-btn delete-command-btn" data-path="${cmd.path}">🗑️</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    // Available templates section (both skills and commands)
+    const allTemplates = [
+      ...availableSkillTemplates.map(t => ({ ...t, type: 'skill' })),
+      ...availableCommandTemplates.map(t => ({ ...t, type: 'command' })),
+    ];
+    if (allTemplates.length > 0) {
       html += `
         <div class="tools-section-header">Available from Repository</div>
-        ${availableTemplates.map(template => `
+        ${allTemplates.map(template => `
           <div class="tools-item template-item" data-template-path="${template.path}">
             <div class="tools-item-info">
               <span class="tools-item-status">📋</span>
               <div class="tools-item-details">
-                <span class="tools-item-name">${template.name}</span>
+                <span class="tools-item-name">/${template.name}</span>
                 <span class="tools-item-description">${template.description || 'No description'}</span>
               </div>
-              <span class="tools-item-badge template">Template</span>
+              <span class="tools-item-badge template">${template.type === 'skill' ? 'Skill' : 'Command'}</span>
             </div>
             <div class="tools-item-actions">
               <button class="tools-item-btn preview-template-btn" data-path="${template.path}" data-name="${template.name}">Preview</button>
-              <button class="tools-item-btn install-template-btn primary" data-path="${template.path}" data-type="skill">Install</button>
+              <button class="tools-item-btn install-template-btn primary" data-path="${template.path}" data-type="${template.type}">Install</button>
             </div>
           </div>
         `).join('')}
       `;
     }
 
-    if (installedSkills.length === 0 && availableTemplates.length === 0) {
+    if (installedSkills.length === 0 && toolsState.commands.length === 0 && allTemplates.length === 0) {
       html = `
         <div class="tools-empty-state">
           <div class="empty-icon">⚡</div>
-          <p>No skills available</p>
-          <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">
-            Clone everything-claude-code repo to repos/ folder
-          </p>
+          <p>No skills or commands available</p>
+          <button class="tools-item-btn create-command-btn" style="margin-top:12px;">+ Create Skill</button>
         </div>
       `;
     }
 
     container.innerHTML = html;
+
+    // Command CRUD handlers
+    container.querySelectorAll('.create-command-btn').forEach(btn => {
+      btn.addEventListener('click', () => showCreateCommandModal());
+    });
+    container.querySelectorAll('.view-command-btn').forEach(btn => {
+      btn.addEventListener('click', () => viewCommand(btn.dataset.path));
+    });
+    container.querySelectorAll('.edit-command-btn').forEach(btn => {
+      btn.addEventListener('click', () => editCommand(btn.dataset.path));
+    });
+    container.querySelectorAll('.delete-command-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteCommandConfirm(btn.dataset.path));
+    });
 
     // Template handlers
     container.querySelectorAll('.preview-template-btn').forEach(btn => {
@@ -1806,132 +1866,6 @@ exit 0"></textarea>
 // Commands Tab
 // ============================================
 
-async function renderCommandsTab() {
-  const container = document.getElementById('commandsList');
-  if (!container) return;
-
-  if (!state.activeProject) {
-    container.innerHTML = `
-      <div class="tools-empty-state">
-        <div class="empty-icon">⌨️</div>
-        <p>Select a project to view commands</p>
-      </div>
-    `;
-    return;
-  }
-
-  try {
-    // Load installed commands
-    const projectCommands = await GetProjectCommands(state.activeProject.path);
-    const globalCommands = await GetGlobalCommands();
-    toolsState.commands = [...projectCommands, ...globalCommands];
-    const installedNames = new Set(toolsState.commands.map(c => c.name));
-
-    // Load template commands from repo
-    const templateCommands = await GetTemplateCommands();
-    const availableTemplates = templateCommands.filter(t => !installedNames.has(t.name));
-
-    let html = '';
-
-    // Header with create button
-    html += `
-      <div class="tools-header-row">
-        <span class="tools-header-title">Slash Commands</span>
-        <button class="tools-item-btn create-command-btn">+ New</button>
-      </div>
-    `;
-
-    // Installed commands section
-    if (toolsState.commands.length > 0) {
-      html += `
-        <div class="tools-section-header">Installed Commands</div>
-        ${toolsState.commands.map(cmd => `
-          <div class="tools-item" data-command-path="${cmd.path}">
-            <div class="tools-item-info">
-              <span class="tools-item-status">⌨️</span>
-              <div class="tools-item-details">
-                <span class="tools-item-name">/${cmd.isGlobal ? '' : 'project:'}${cmd.name}</span>
-                <span class="tools-item-description">${cmd.description || 'No description'}</span>
-              </div>
-              ${cmd.isGlobal ? '<span class="tools-item-badge global">Global</span>' : '<span class="tools-item-badge">Project</span>'}
-            </div>
-            <div class="tools-item-actions">
-              <button class="tools-item-btn view-command-btn" data-path="${cmd.path}">View</button>
-              <button class="tools-item-btn edit-command-btn" data-path="${cmd.path}">Edit</button>
-              ${!cmd.isGlobal ? `<button class="tools-item-btn delete-command-btn" data-path="${cmd.path}">🗑️</button>` : ''}
-            </div>
-          </div>
-        `).join('')}
-      `;
-    }
-
-    // Available templates section
-    if (availableTemplates.length > 0) {
-      html += `
-        <div class="tools-section-header">Available from Repository</div>
-        ${availableTemplates.map(template => `
-          <div class="tools-item template-item" data-template-path="${template.path}">
-            <div class="tools-item-info">
-              <span class="tools-item-status">📋</span>
-              <div class="tools-item-details">
-                <span class="tools-item-name">/${template.name}</span>
-                <span class="tools-item-description">${template.description || 'No description'}</span>
-              </div>
-              <span class="tools-item-badge template">Template</span>
-            </div>
-            <div class="tools-item-actions">
-              <button class="tools-item-btn preview-template-btn" data-path="${template.path}" data-name="${template.name}">Preview</button>
-              <button class="tools-item-btn install-template-btn primary" data-path="${template.path}" data-type="command">Install</button>
-            </div>
-          </div>
-        `).join('')}
-      `;
-    }
-
-    if (toolsState.commands.length === 0 && availableTemplates.length === 0) {
-      html = `
-        <div class="tools-empty-state">
-          <div class="empty-icon">⌨️</div>
-          <p>No commands available</p>
-          <button class="tools-item-btn create-command-btn" style="margin-top:12px;">+ Create Command</button>
-        </div>
-      `;
-    }
-
-    container.innerHTML = html;
-
-    // Add click handlers
-    container.querySelectorAll('.create-command-btn').forEach(btn => {
-      btn.addEventListener('click', () => showCreateCommandModal());
-    });
-    container.querySelectorAll('.view-command-btn').forEach(btn => {
-      btn.addEventListener('click', () => viewCommand(btn.dataset.path));
-    });
-    container.querySelectorAll('.edit-command-btn').forEach(btn => {
-      btn.addEventListener('click', () => editCommand(btn.dataset.path));
-    });
-    container.querySelectorAll('.delete-command-btn').forEach(btn => {
-      btn.addEventListener('click', () => deleteCommandConfirm(btn.dataset.path));
-    });
-
-    // Template handlers
-    container.querySelectorAll('.preview-template-btn').forEach(btn => {
-      btn.addEventListener('click', () => previewTemplate(btn.dataset.path, btn.dataset.name, 'command'));
-    });
-    container.querySelectorAll('.install-template-btn').forEach(btn => {
-      btn.addEventListener('click', () => installTemplate(btn.dataset.path, btn.dataset.type));
-    });
-  } catch (err) {
-    logger.error('Failed to load commands', { error: err.message || String(err) });
-    container.innerHTML = `
-      <div class="tools-empty-state">
-        <div class="empty-icon">⚠️</div>
-        <p>Error loading commands</p>
-      </div>
-    `;
-  }
-}
-
 // View command content (read-only)
 async function viewCommand(path) {
   try {
@@ -1996,7 +1930,7 @@ async function editCommand(path) {
         try {
           await SaveCommandContent(path, editor.value);
           closeToolsModal();
-          renderCommandsTab();
+          renderSkillsTab();
         } catch (err) {
           logger.error('Failed to save command', { error: err.message || String(err) });
           alert('Failed to save command: ' + err);

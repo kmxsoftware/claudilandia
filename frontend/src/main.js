@@ -488,9 +488,6 @@ function render() {
                 <button class="tools-tab" data-tools-tab="teams">
                   <span class="tools-tab-icon">👥</span> Teams
                 </button>
-                <button class="tools-tab" data-tools-tab="commands">
-                  <span class="tools-tab-icon">⌨️</span> Commands
-                </button>
                 <button class="tools-tab" data-tools-tab="skills">
                   <span class="tools-tab-icon">⚡</span> Skills
                 </button>
@@ -523,9 +520,6 @@ function render() {
               </div>
               <div id="toolsTeamsTab" class="tools-tab-content" style="display:none;">
                 <div id="teamsDashboardContainer"></div>
-              </div>
-              <div id="toolsCommandsTab" class="tools-tab-content" style="display:none;">
-                <div class="tools-list" id="commandsList"></div>
               </div>
               <div id="toolsSkillsTab" class="tools-tab-content" style="display:none;">
                 <div class="tools-list" id="skillsList"></div>

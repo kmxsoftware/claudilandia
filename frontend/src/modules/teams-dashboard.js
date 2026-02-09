@@ -1,5 +1,5 @@
 // Teams Dashboard - Monitor Claude Code Agent Teams
-import { GetAllTeams, GetTeamHistory } from '../../wailsjs/go/main/App';
+import { GetAllTeams, GetTeamHistory, StartTeamsPolling, StopTeamsPolling } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 export const TEAMS_TAB_ID = 'teams';
@@ -15,17 +15,33 @@ let teamsState = {
 // Init & Events
 // ============================================
 
-export function initTeamsDashboard() {
-  // Initial load
-  loadTeams();
+let teamsPollingActive = false;
 
-  // Real-time updates
+export function initTeamsDashboard() {
+  // Real-time updates (listener always registered, data only arrives when polling)
   EventsOn('teams-update', (data) => {
     if (data) {
       teamsState.teams = data;
       renderTeamsDashboard();
     }
   });
+}
+
+// Called when Teams tab becomes active
+export function startTeamsTab() {
+  if (!teamsPollingActive) {
+    teamsPollingActive = true;
+    StartTeamsPolling();
+  }
+  loadTeams();
+}
+
+// Called when Teams tab becomes inactive
+export function stopTeamsTab() {
+  if (teamsPollingActive) {
+    teamsPollingActive = false;
+    StopTeamsPolling();
+  }
 }
 
 async function loadTeams() {

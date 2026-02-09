@@ -177,13 +177,11 @@ func (a *App) startup(ctx context.Context) {
 	a.coverageStopChan = make(chan struct{})
 	go a.coverageWatcher.StartPolling(5*time.Second, a.coverageStopChan)
 
-	// Start teams watcher (poll every 3 seconds)
+	// Initialize teams watcher (polling starts on-demand when tab is active)
 	a.teamsWatcher = teams.NewWatcher()
 	a.teamsWatcher.SetUpdateCallback(func(allTeams map[string]*teams.TeamSnapshot) {
 		runtime.EventsEmit(a.ctx, "teams-update", allTeams)
 	})
-	a.teamsStopChan = make(chan struct{})
-	go a.teamsWatcher.StartPolling(3*time.Second, a.teamsStopChan)
 
 	// Restore window state after a short delay (needs window to be ready)
 	const windowReadyDelay = 150 * time.Millisecond
@@ -805,6 +803,23 @@ func (a *App) GetITermSessionContentsByID(sessionID string, lines int) (string, 
 	return a.itermController.GetSessionContentsByID(sessionID, lines)
 }
 
+// RequestStyledHistory requests styled scrollback history via Python bridge
+func (a *App) RequestStyledHistory(sessionID string) error {
+	if a.itermController == nil {
+		return fmt.Errorf("iTerm controller not initialized")
+	}
+	return a.itermController.RequestStyledHistory(sessionID, func(content *iterm.StyledContent) {
+		linesJSON, err := json.Marshal(content.Lines)
+		if err != nil {
+			return
+		}
+		runtime.EventsEmit(a.ctx, "iterm-session-history", map[string]interface{}{
+			"sessionId": content.SessionID,
+			"lines":     string(linesJSON),
+		})
+	})
+}
+
 // WriteITermTextBySessionID writes text to a specific iTerm2 session
 func (a *App) WriteITermTextBySessionID(sessionID string, text string, pressEnter bool) error {
 	if a.itermController == nil {
@@ -1002,6 +1017,26 @@ func (a *App) StopVoiceRecognition() {
 // ============================================
 // Agent Teams Methods
 // ============================================
+
+// StartTeamsPolling starts polling for team changes (called when Teams tab is opened)
+func (a *App) StartTeamsPolling() {
+	if a.teamsWatcher == nil {
+		return
+	}
+	if a.teamsStopChan != nil {
+		return // already polling
+	}
+	a.teamsStopChan = make(chan struct{})
+	go a.teamsWatcher.StartPolling(3*time.Second, a.teamsStopChan)
+}
+
+// StopTeamsPolling stops polling for team changes (called when Teams tab is closed)
+func (a *App) StopTeamsPolling() {
+	if a.teamsStopChan != nil {
+		close(a.teamsStopChan)
+		a.teamsStopChan = nil
+	}
+}
 
 // GetAllTeams returns all currently active teams
 func (a *App) GetAllTeams() map[string]*teams.TeamSnapshot {

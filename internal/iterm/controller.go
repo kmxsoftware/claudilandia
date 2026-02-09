@@ -1022,6 +1022,15 @@ func (c *Controller) StartStyledContentWatching(
 	return nil
 }
 
+// RequestStyledHistory asks the Python bridge to fetch styled scrollback history
+func (c *Controller) RequestStyledHistory(sessionID string, handler func(*StyledContent)) error {
+	if !c.IsBridgeAvailable() {
+		return fmt.Errorf("Python bridge not available")
+	}
+	c.pythonBridge.SetHistoryHandler(handler)
+	return c.pythonBridge.RequestHistory(sessionID)
+}
+
 // StopStyledContentWatching stops both styled and plain content watching
 func (c *Controller) StopStyledContentWatching() {
 	c.StopContentWatching()

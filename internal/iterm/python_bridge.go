@@ -86,6 +86,7 @@ type PythonBridge struct {
 
 	onContent func(*StyledContent)
 	onProfile func(*ProfileData)
+	onHistory func(*StyledContent)
 	onError   func(string)
 }
 
@@ -110,6 +111,18 @@ func (b *PythonBridge) SetProfileHandler(handler func(*ProfileData)) {
 	b.mu.Lock()
 	b.onProfile = handler
 	b.mu.Unlock()
+}
+
+// SetHistoryHandler sets the callback for styled scrollback history
+func (b *PythonBridge) SetHistoryHandler(handler func(*StyledContent)) {
+	b.mu.Lock()
+	b.onHistory = handler
+	b.mu.Unlock()
+}
+
+// RequestHistory asks the bridge to fetch styled scrollback history
+func (b *PythonBridge) RequestHistory(sessionID string) error {
+	return b.sendCommand(bridgeCommand{Cmd: "history", SessionID: sessionID})
 }
 
 // SetErrorHandler sets the callback for bridge errors
@@ -303,6 +316,18 @@ func (b *PythonBridge) readOutput() {
 					SessionID: msg.SessionID,
 					Colors:    *msg.Colors,
 				})
+			}
+
+		case "history":
+			b.mu.Lock()
+			handler := b.onHistory
+			b.mu.Unlock()
+			if handler != nil {
+				content := &StyledContent{
+					SessionID: msg.SessionID,
+				}
+				json.Unmarshal(msg.Lines, &content.Lines)
+				handler(content)
 			}
 
 		case "error":

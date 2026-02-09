@@ -263,6 +263,8 @@ export function RenameITermTab(arg1:number,arg2:number,arg3:string):Promise<void
 
 export function RenameITermTabBySessionID(arg1:string,arg2:string):Promise<void>;
 
+export function RequestStyledHistory(arg1:string):Promise<void>;
+
 export function ResetTestState(arg1:string):Promise<void>;
 
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
@@ -309,11 +311,15 @@ export function StartContainer(arg1:string):Promise<void>;
 
 export function StartRemoteAccess(arg1:remote.Config):Promise<main.RemoteAccessStatus>;
 
+export function StartTeamsPolling():Promise<void>;
+
 export function StartVoiceRecognition(arg1:string):Promise<string>;
 
 export function StopContainer(arg1:string):Promise<void>;
 
 export function StopRemoteAccess():Promise<void>;
+
+export function StopTeamsPolling():Promise<void>;
 
 export function StopVoiceRecognition():Promise<void>;
 

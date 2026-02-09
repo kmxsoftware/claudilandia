@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
 import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -198,12 +198,13 @@ window.itermSendText = async function(text) {
 window.itermFocusSession = async function(sessionId) {
   try {
     await SwitchITermTabBySessionID(sessionId);
+    await FocusITerm();
   } catch (err) {
     console.error('Failed to focus session:', err);
   }
 };
 
-// Load more history lines from scrollback buffer
+// Load more history lines from scrollback buffer (styled via Python bridge)
 window.itermLoadHistory = async function() {
   if (!dashboardState.viewingSessionId || dashboardState.historyLoading) return;
 
@@ -212,16 +213,10 @@ window.itermLoadHistory = async function() {
   if (btn) btn.classList.add('loading');
 
   try {
-    const contents = await GetITermSessionContentsByID(dashboardState.viewingSessionId, 0);
-    if (contents) {
-      const allLines = contents.split('\n');
-      // Store history lines (the scrollback content above visible screen)
-      dashboardState.historyLines = allLines;
-      updateStyledOutputViewer();
-    }
+    await RequestStyledHistory(dashboardState.viewingSessionId);
+    // Response arrives via 'iterm-session-history' event
   } catch (err) {
     console.error('Failed to load history:', err);
-  } finally {
     dashboardState.historyLoading = false;
     if (btn) btn.classList.remove('loading');
   }
@@ -611,6 +606,20 @@ export function initTerminalDashboard() {
     }
   });
 
+  EventsOn('iterm-session-history', (data) => {
+    if (!data || data.sessionId !== dashboardState.viewingSessionId) return;
+    try {
+      dashboardState.historyLines = typeof data.lines === 'string' ? JSON.parse(data.lines) : data.lines;
+      dashboardState.historyLoading = false;
+      const btn = document.querySelector('.history-load-btn');
+      if (btn) btn.classList.remove('loading');
+      updateStyledOutputViewer();
+    } catch (e) {
+      console.error('Failed to parse history:', e);
+      dashboardState.historyLoading = false;
+    }
+  });
+
   EventsOn('iterm-session-profile', (data) => {
     if (!data || data.sessionId !== dashboardState.viewingSessionId) return;
     dashboardState.profileColors = data.colors;
@@ -687,36 +696,20 @@ function updateStyledOutputViewer() {
 
   const fragment = document.createDocumentFragment();
 
-  // Prepend scrollback history if loaded
-  if (dashboardState.historyLines && dashboardState.historyLines.length > 0) {
-    for (const histLine of dashboardState.historyLines) {
-      const lineDiv = document.createElement('div');
-      lineDiv.className = 'term-line term-history-line';
-      lineDiv.textContent = histLine || '\u00A0';
-      fragment.appendChild(lineDiv);
-    }
-    const sep = document.createElement('div');
-    sep.className = 'term-history-separator';
-    sep.textContent = '── live ──';
-    fragment.appendChild(sep);
-  }
-
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const lineRuns = lines[lineIdx];
+  // Helper: render a single line of styled runs into a div
+  function renderStyledLine(lineRuns, className) {
     const lineDiv = document.createElement('div');
-    lineDiv.className = 'term-line';
+    lineDiv.className = className;
 
     if (!lineRuns || lineRuns.length === 0) {
       lineDiv.textContent = '\u00A0';
-      fragment.appendChild(lineDiv);
-      continue;
+      return lineDiv;
     }
 
     for (const run of lineRuns) {
       const span = document.createElement('span');
       let style = '';
 
-      // Skip inline color when it matches profile defaults (let theme show through)
       const fgIsDefault = !run.fg || colorsMatch(run.fg, defaultFg);
       const bgIsDefault = !run.bg || colorsMatch(run.bg, defaultBg);
 
@@ -750,7 +743,22 @@ function updateStyledOutputViewer() {
       lineDiv.appendChild(span);
     }
 
-    fragment.appendChild(lineDiv);
+    return lineDiv;
+  }
+
+  // Prepend scrollback history if loaded (styled)
+  if (dashboardState.historyLines && dashboardState.historyLines.length > 0) {
+    for (const histLineRuns of dashboardState.historyLines) {
+      fragment.appendChild(renderStyledLine(histLineRuns, 'term-line term-history-line'));
+    }
+    const sep = document.createElement('div');
+    sep.className = 'term-history-separator';
+    sep.textContent = '── live ──';
+    fragment.appendChild(sep);
+  }
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    fragment.appendChild(renderStyledLine(lines[lineIdx], 'term-line'));
   }
 
   viewer.innerHTML = '';
@@ -900,7 +908,7 @@ export function renderTerminalDashboard() {
             </div>
           ` : `
             <div class="output-viewer-container">
-              <div class="iterm-output-viewer" id="itermOutputViewer"></div>
+              <div class="iterm-output-viewer" id="itermOutputViewer" onclick="document.getElementById('itermCommandInput')?.focus()"></div>
               <div class="keyboard-helper">
                 <button class="key-btn" onclick="window.itermSendKey('enter')">Enter</button>
                 <button class="key-btn" onclick="window.itermSendKey('shift-tab')">Shift+Tab</button>

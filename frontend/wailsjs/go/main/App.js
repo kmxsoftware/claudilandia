@@ -506,6 +506,10 @@ export function RenameITermTabBySessionID(arg1, arg2) {
   return window['go']['main']['App']['RenameITermTabBySessionID'](arg1, arg2);
 }
 
+export function RequestStyledHistory(arg1) {
+  return window['go']['main']['App']['RequestStyledHistory'](arg1);
+}
+
 export function ResetTestState(arg1) {
   return window['go']['main']['App']['ResetTestState'](arg1);
 }
@@ -598,6 +602,10 @@ export function StartRemoteAccess(arg1) {
   return window['go']['main']['App']['StartRemoteAccess'](arg1);
 }
 
+export function StartTeamsPolling() {
+  return window['go']['main']['App']['StartTeamsPolling']();
+}
+
 export function StartVoiceRecognition(arg1) {
   return window['go']['main']['App']['StartVoiceRecognition'](arg1);
 }
@@ -608,6 +616,10 @@ export function StopContainer(arg1) {
 
 export function StopRemoteAccess() {
   return window['go']['main']['App']['StopRemoteAccess']();
+}
+
+export function StopTeamsPolling() {
+  return window['go']['main']['App']['StopTeamsPolling']();
 }
 
 export function StopVoiceRecognition() {
