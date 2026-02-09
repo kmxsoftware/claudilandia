@@ -1088,8 +1088,45 @@ export function renderTerminalDashboard() {
               </div>
             </div>
           `) : `
-            <div class="output-placeholder">
-              ${selectedTabs.length === 0 && isRealProject ? `
+            <div class="output-placeholder ${allTabs.length === 0 ? 'setup-guide' : ''}">
+              ${allTabs.length === 0 ? `
+                <div class="setup-guide-content">
+                  <div class="setup-guide-title">iTerm2 Setup</div>
+                  <p class="setup-guide-desc">Claudilandia connects to iTerm2 via its Python API to display and control your terminal sessions. Follow these steps to get started:</p>
+                  <div class="setup-steps">
+                    <div class="setup-step">
+                      <span class="step-number">1</span>
+                      <div class="step-content">
+                        <div class="step-title">Enable the Python API</div>
+                        <div class="step-detail">Open <strong>iTerm2</strong> → <strong>Settings</strong> (or press <kbd>Cmd</kbd>+<kbd>,</kbd>) → <strong>General</strong> → <strong>Magic</strong></div>
+                        <div class="step-detail">Check <strong>"Enable Python API"</strong></div>
+                      </div>
+                    </div>
+                    <div class="setup-step">
+                      <span class="step-number">2</span>
+                      <div class="step-content">
+                        <div class="step-title">Install Python dependencies</div>
+                        <div class="step-detail">Open a terminal and run:</div>
+                        <code class="step-code">cd scripts && python3 -m venv venv && source venv/bin/activate && pip install iterm2</code>
+                      </div>
+                    </div>
+                    <div class="setup-step">
+                      <span class="step-number">3</span>
+                      <div class="step-content">
+                        <div class="step-title">Restart iTerm2</div>
+                        <div class="step-detail">Quit iTerm2 completely (<kbd>Cmd</kbd>+<kbd>Q</kbd>) and reopen it so the Python API activates.</div>
+                      </div>
+                    </div>
+                    <div class="setup-step">
+                      <span class="step-number">4</span>
+                      <div class="step-content">
+                        <div class="step-title">Relaunch Claudilandia</div>
+                        <div class="step-detail">Rebuild and open the app. Your iTerm2 sessions will appear here automatically.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ` : selectedTabs.length === 0 && isRealProject ? `
                 <span>No terminals for this project</span>
                 <button class="create-first-btn" onclick="window.itermCreateTab()">Create Terminal</button>
               ` : `
@@ -1098,8 +1135,47 @@ export function renderTerminalDashboard() {
             </div>
           `}
         ` : `
-          <div class="output-placeholder">
-            <span>Select a project</span>
+          <div class="output-placeholder setup-guide">
+            ${groups.length === 0 ? `
+              <div class="setup-guide-content">
+                <div class="setup-guide-title">iTerm2 Setup</div>
+                <p class="setup-guide-desc">Claudilandia connects to iTerm2 via its Python API to display and control your terminal sessions. Follow these steps to get started:</p>
+                <div class="setup-steps">
+                  <div class="setup-step">
+                    <span class="step-number">1</span>
+                    <div class="step-content">
+                      <div class="step-title">Enable the Python API</div>
+                      <div class="step-detail">Open <strong>iTerm2</strong> → <strong>Settings</strong> (or press <kbd>Cmd</kbd>+<kbd>,</kbd>) → <strong>General</strong> → <strong>Magic</strong></div>
+                      <div class="step-detail">Check <strong>"Enable Python API"</strong></div>
+                    </div>
+                  </div>
+                  <div class="setup-step">
+                    <span class="step-number">2</span>
+                    <div class="step-content">
+                      <div class="step-title">Install Python dependencies</div>
+                      <div class="step-detail">Open a terminal and run:</div>
+                      <code class="step-code">cd scripts && python3 -m venv venv && source venv/bin/activate && pip install iterm2</code>
+                    </div>
+                  </div>
+                  <div class="setup-step">
+                    <span class="step-number">3</span>
+                    <div class="step-content">
+                      <div class="step-title">Restart iTerm2</div>
+                      <div class="step-detail">Quit iTerm2 completely (<kbd>Cmd</kbd>+<kbd>Q</kbd>) and reopen it so the Python API activates.</div>
+                    </div>
+                  </div>
+                  <div class="setup-step">
+                    <span class="step-number">4</span>
+                    <div class="step-content">
+                      <div class="step-title">Relaunch Claudilandia</div>
+                      <div class="step-detail">Rebuild and open the app. Your iTerm2 sessions will appear here automatically.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ` : `
+              <span>Select a project</span>
+            `}
           </div>
         `}
       </div>
@@ -1425,10 +1501,110 @@ function addTerminalDashboardStyles() {
     .output-placeholder {
       flex: 1;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       color: #475569;
       font-size: 13px;
+    }
+
+    .output-placeholder.setup-guide {
+      align-items: flex-start;
+      padding: 32px;
+      overflow-y: auto;
+    }
+
+    .setup-guide-content {
+      max-width: 520px;
+      width: 100%;
+    }
+
+    .setup-guide-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #cdd6f4;
+      margin-bottom: 8px;
+    }
+
+    .setup-guide-desc {
+      color: #6c7086;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 0 0 24px 0;
+    }
+
+    .setup-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .setup-step {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(137, 180, 250, 0.1);
+      color: #89b4fa;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .step-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .step-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #cdd6f4;
+      margin-bottom: 4px;
+    }
+
+    .step-detail {
+      color: #6c7086;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .step-detail strong {
+      color: #a6adc8;
+    }
+
+    .step-detail kbd {
+      background: rgba(205, 214, 244, 0.08);
+      border: 1px solid #313244;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 11px;
+      color: #a6adc8;
+      font-family: inherit;
+    }
+
+    .step-code {
+      display: block;
+      margin-top: 6px;
+      padding: 8px 12px;
+      background: #0f0f17;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+      font-size: 11px;
+      color: #a6adc8;
+      word-break: break-all;
+      line-height: 1.5;
+      user-select: all;
     }
 
     .output-viewer-container {
