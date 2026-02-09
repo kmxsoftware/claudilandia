@@ -137,6 +137,9 @@ import {
   initITermPanel
 } from './modules/iterm-panel.js';
 
+// Keyboard shortcuts module
+import { initKeyboardShortcuts } from './modules/keyboard-shortcuts.js';
+
 // NOTE: xterm.js terminal removed - using iTerm2 integration instead
 
 // Backend imports
@@ -171,7 +174,7 @@ import {
   GetPomodoroSettings,
   SavePomodoroSettings
 } from '../wailsjs/go/main/App';
-import { EventsOn, WindowToggleMaximise } from '../wailsjs/runtime/runtime';
+import { EventsOn, WindowToggleMaximise, WindowIsFullscreen } from '../wailsjs/runtime/runtime';
 
 // Module callbacks will be set up in init()
 
@@ -328,6 +331,17 @@ async function init() {
 
   // Initialize teams dashboard (tools panel)
   initTeamsDashboard();
+
+  // Initialize keyboard shortcuts (Shift+Arrow for project/tab navigation)
+  initKeyboardShortcuts();
+
+  // Detect fullscreen and toggle titlebar visibility
+  async function updateFullscreenClass() {
+    const isFs = await WindowIsFullscreen();
+    document.body.classList.toggle('wails-fullscreen', isFs);
+  }
+  updateFullscreenClass();
+  window.addEventListener('resize', updateFullscreenClass);
 
   // Load containers if docker available
   if (state.dockerAvailable) {

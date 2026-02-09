@@ -43,6 +43,11 @@ type AppState struct {
 	TerminalFontSize int `json:"terminalFontSize"`
 	// Tools panel height percentage (global)
 	ToolsPanelHeight float64 `json:"toolsPanelHeight"`
+	// Voice input settings
+	VoiceLang       string `json:"voiceLang"`
+	VoiceAutoSubmit *bool  `json:"voiceAutoSubmit"`
+	// Dashboard fullscreen mode (hide tools panel and browser tabs)
+	DashboardFullscreen bool `json:"dashboardFullscreen"`
 	// Window state (position, size)
 	Window *WindowState `json:"window"`
 	// Pomodoro timer settings

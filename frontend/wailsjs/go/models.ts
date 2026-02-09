@@ -1093,6 +1093,9 @@ export namespace state {
 	    terminalTheme: string;
 	    terminalFontSize: number;
 	    toolsPanelHeight: number;
+	    voiceLang: string;
+	    voiceAutoSubmit?: boolean;
+	    dashboardFullscreen: boolean;
 	    window?: WindowState;
 	    pomodoro?: PomodoroSettings;
 	
@@ -1111,6 +1114,9 @@ export namespace state {
 	        this.terminalTheme = source["terminalTheme"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.toolsPanelHeight = source["toolsPanelHeight"];
+	        this.voiceLang = source["voiceLang"];
+	        this.voiceAutoSubmit = source["voiceAutoSubmit"];
+	        this.dashboardFullscreen = source["dashboardFullscreen"];
 	        this.window = this.convertValues(source["window"], WindowState);
 	        this.pomodoro = this.convertValues(source["pomodoro"], PomodoroSettings);
 	    }

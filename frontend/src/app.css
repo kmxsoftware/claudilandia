@@ -53,6 +53,11 @@ body {
   user-select: none;
 }
 
+/* Hide titlebar in macOS fullscreen */
+body.wails-fullscreen .titlebar-drag-region {
+  height: 0;
+}
+
 /* Main Content */
 .main-content {
   display: flex;

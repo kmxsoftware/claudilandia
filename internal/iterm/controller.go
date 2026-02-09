@@ -689,6 +689,10 @@ func (c *Controller) SendSpecialKeyBySessionID(sessionID string, key string) err
 		asExpr = `(ASCII character 27) & "[A"`
 	case "down":
 		asExpr = `(ASCII character 27) & "[B"`
+	case "left":
+		asExpr = `(ASCII character 27) & "[D"`
+	case "right":
+		asExpr = `(ASCII character 27) & "[C"`
 	case "enter":
 		asExpr = `return`
 	default:

@@ -89,6 +89,8 @@ export function GetContainerLogs(arg1:string):Promise<string>;
 
 export function GetContainers(arg1:boolean):Promise<Array<docker.Container>>;
 
+export function GetDashboardFullscreen():Promise<boolean>;
+
 export function GetDefaultColors():Promise<Array<string>>;
 
 export function GetDefaultIcons():Promise<Array<string>>;
@@ -207,6 +209,10 @@ export function GetToolsPanelHeight():Promise<number>;
 
 export function GetUserMCPServers():Promise<Array<claude.MCPServer>>;
 
+export function GetVoiceAutoSubmit():Promise<boolean>;
+
+export function GetVoiceLang():Promise<string>;
+
 export function IncrementPromptUsage(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function InstallHook(arg1:string,arg2:string):Promise<void>;
@@ -301,11 +307,17 @@ export function SetActiveProject(arg1:string):Promise<void>;
 
 export function SetActiveTerminal(arg1:string,arg2:string):Promise<void>;
 
+export function SetDashboardFullscreen(arg1:boolean):Promise<void>;
+
 export function SetTerminalFontSize(arg1:number):Promise<void>;
 
 export function SetTerminalTheme(arg1:string):Promise<void>;
 
 export function SetToolsPanelHeight(arg1:number):Promise<void>;
+
+export function SetVoiceAutoSubmit(arg1:boolean):Promise<void>;
+
+export function SetVoiceLang(arg1:string):Promise<void>;
 
 export function StartContainer(arg1:string):Promise<void>;
 

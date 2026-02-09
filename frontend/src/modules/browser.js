@@ -178,7 +178,7 @@ export function switchToQATab() {
 }
 
 // Switch to the Structure tab (local function for browser module)
-function switchToStructureTabLocal() {
+export function switchToStructureTabLocal() {
   state.browser.activeTabId = STRUCTURE_TAB_ID;
 
   // Stop watching terminal output when leaving dashboard

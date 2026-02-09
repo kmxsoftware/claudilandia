@@ -649,6 +649,51 @@ func (a *App) SetTerminalFontSize(size int) {
 	}
 }
 
+// GetVoiceLang returns the saved voice input language
+func (a *App) GetVoiceLang() string {
+	if a.stateManager == nil {
+		return "en-US"
+	}
+	return a.stateManager.GetVoiceLang()
+}
+
+// SetVoiceLang saves the voice input language
+func (a *App) SetVoiceLang(lang string) {
+	if a.stateManager != nil {
+		a.stateManager.SetVoiceLang(lang)
+	}
+}
+
+// GetVoiceAutoSubmit returns the saved voice auto-submit setting
+func (a *App) GetVoiceAutoSubmit() bool {
+	if a.stateManager == nil {
+		return true
+	}
+	return a.stateManager.GetVoiceAutoSubmit()
+}
+
+// SetVoiceAutoSubmit saves the voice auto-submit setting
+func (a *App) SetVoiceAutoSubmit(enabled bool) {
+	if a.stateManager != nil {
+		a.stateManager.SetVoiceAutoSubmit(enabled)
+	}
+}
+
+// GetDashboardFullscreen returns the saved dashboard fullscreen state
+func (a *App) GetDashboardFullscreen() bool {
+	if a.stateManager == nil {
+		return false
+	}
+	return a.stateManager.GetDashboardFullscreen()
+}
+
+// SetDashboardFullscreen saves the dashboard fullscreen state
+func (a *App) SetDashboardFullscreen(enabled bool) {
+	if a.stateManager != nil {
+		a.stateManager.SetDashboardFullscreen(enabled)
+	}
+}
+
 // GetToolsPanelHeight returns the saved tools panel height percentage
 func (a *App) GetToolsPanelHeight() float64 {
 	if a.stateManager == nil {

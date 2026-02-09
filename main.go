@@ -24,7 +24,7 @@ func main() {
 		Height:           900,
 		MinWidth:         800,
 		MinHeight:        600,
-		WindowStartState: options.Normal,
+		WindowStartState: options.Fullscreen,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

@@ -1253,6 +1253,57 @@ func (m *Manager) SetToolsPanelHeight(height float64) {
 	m.Save()
 }
 
+// GetVoiceLang returns the saved voice input language
+func (m *Manager) GetVoiceLang() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state.VoiceLang == "" {
+		return "en-US"
+	}
+	return m.state.VoiceLang
+}
+
+// SetVoiceLang saves the voice input language
+func (m *Manager) SetVoiceLang(lang string) {
+	m.mu.Lock()
+	m.state.VoiceLang = lang
+	m.mu.Unlock()
+	m.Save()
+}
+
+// GetVoiceAutoSubmit returns the saved voice auto-submit setting
+func (m *Manager) GetVoiceAutoSubmit() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state.VoiceAutoSubmit == nil {
+		return true // default
+	}
+	return *m.state.VoiceAutoSubmit
+}
+
+// SetVoiceAutoSubmit saves the voice auto-submit setting
+func (m *Manager) SetVoiceAutoSubmit(enabled bool) {
+	m.mu.Lock()
+	m.state.VoiceAutoSubmit = &enabled
+	m.mu.Unlock()
+	m.Save()
+}
+
+// GetDashboardFullscreen returns the saved dashboard fullscreen state
+func (m *Manager) GetDashboardFullscreen() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.DashboardFullscreen
+}
+
+// SetDashboardFullscreen saves the dashboard fullscreen state
+func (m *Manager) SetDashboardFullscreen(enabled bool) {
+	m.mu.Lock()
+	m.state.DashboardFullscreen = enabled
+	m.mu.Unlock()
+	m.Save()
+}
+
 // GetWindowState returns the saved window state
 func (m *Manager) GetWindowState() *WindowState {
 	m.mu.RLock()

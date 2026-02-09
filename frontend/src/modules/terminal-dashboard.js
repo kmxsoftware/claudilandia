@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
 import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -198,10 +198,10 @@ window.itermSendText = async function(text) {
 // Toggle fullscreen mode - hide everything except projects, terminal, and right sidebar
 window.itermToggleFullscreen = function() {
   dashboardState.fullscreen = !dashboardState.fullscreen;
+  SetDashboardFullscreen(dashboardState.fullscreen);
   const cls = document.querySelector('.app-container')?.classList;
   if (!cls) return;
   cls.toggle('dashboard-fullscreen', dashboardState.fullscreen);
-  // Update button icon
   const btn = document.querySelector('.fullscreen-toggle-btn');
   if (btn) btn.textContent = dashboardState.fullscreen ? '⊗' : '⤢';
 };
@@ -472,12 +472,13 @@ window.itermToggleVoiceConfig = function(e) {
 
 window.itermSetVoiceLang = function(lang) {
   dashboardState.voiceLang = lang;
-  // Update radio buttons
+  SetVoiceLang(lang);
   document.querySelectorAll('.voice-lang-radio').forEach(r => r.checked = r.value === lang);
 };
 
 window.itermSetVoiceAutoSubmit = function(checked) {
   dashboardState.voiceAutoSubmit = checked;
+  SetVoiceAutoSubmit(checked);
 };
 
 // Close config panel on outside click
@@ -641,12 +642,27 @@ export function initTerminalDashboard() {
     }
   });
 
-  // Load persisted theme and font size
+  // Load persisted theme, font size, and voice settings
   GetTerminalTheme().then(theme => {
     dashboardState.currentTheme = theme || 'dracula';
   }).catch(() => {});
   GetTerminalFontSize().then(size => {
     dashboardState.fontSize = size || 12;
+  }).catch(() => {});
+  GetVoiceLang().then(lang => {
+    dashboardState.voiceLang = lang || 'en-US';
+  }).catch(() => {});
+  GetVoiceAutoSubmit().then(enabled => {
+    dashboardState.voiceAutoSubmit = enabled;
+  }).catch(() => {});
+  GetDashboardFullscreen().then(enabled => {
+    dashboardState.fullscreen = enabled;
+    if (enabled) {
+      const cls = document.querySelector('.app-container')?.classList;
+      if (cls) cls.add('dashboard-fullscreen');
+      const btn = document.querySelector('.fullscreen-toggle-btn');
+      if (btn) btn.textContent = '⊗';
+    }
   }).catch(() => {});
 
   // Close theme menu on click outside
@@ -840,9 +856,10 @@ export function renderTerminalDashboard() {
   if (projectsList) {
     projectsList.innerHTML = groups.length > 0 ? `
       <div class="terminal-list">
-        ${groups.map(g => `
+        ${groups.map((g, i) => `
           <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
                onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
+            <span class="project-number">${i + 1}</span>
             ${g.icon ? `<span class="project-icon">${g.icon}</span>` : ''}
             <span class="terminal-list-name">${escapeHtml(g.name)}</span>
             ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length}</span>` : ''}
@@ -918,13 +935,11 @@ export function renderTerminalDashboard() {
               <div class="iterm-output-viewer" id="itermOutputViewer" onclick="document.getElementById('itermCommandInput')?.focus()"></div>
               <div class="keyboard-helper">
                 <button class="key-btn" onclick="window.itermSendKey('enter')">Enter</button>
-                <button class="key-btn" onclick="window.itermSendKey('shift-tab')">Shift+Tab</button>
-                <button class="key-btn" onclick="window.itermSendKey('esc')">ESC</button>
                 <button class="key-btn" onclick="window.itermSendKey('tab')">Tab</button>
+                <button class="key-btn" onclick="window.itermSendKey('left')">←</button>
+                <button class="key-btn" onclick="window.itermSendKey('right')">→</button>
                 <button class="key-btn" onclick="window.itermSendKey('up')">↑</button>
                 <button class="key-btn" onclick="window.itermSendKey('down')">↓</button>
-                <button class="term-cmd-btn" onclick="window.itermSendText('/clear')" title="Send /clear">/clear</button>
-                <button class="term-cmd-btn" onclick="window.itermSendText('/compact')" title="Send /compact">/compact</button>
                 <span class="bridge-indicator ${dashboardState.useStyledMode ? 'active' : ''}" title="${dashboardState.useStyledMode ? 'Python bridge (styled)' : 'Not connected'}"></span>
                 <div class="voice-controls">
                   <button id="voiceMicBtn" class="voice-mic-btn voice-${dashboardState.voiceState}" onclick="window.itermToggleVoice()" title="${dashboardState.voiceState === 'listening' ? 'Stop & send' : 'Start voice'}">
@@ -1129,6 +1144,25 @@ function addTerminalDashboardStyles() {
       color: #fff;
     }
 
+    .project-number {
+      font-size: 10px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      color: #585b70;
+      background: rgba(205, 214, 244, 0.06);
+      border-radius: 3px;
+      min-width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .terminal-list-item.viewing .project-number {
+      color: #89b4fa;
+      background: rgba(137, 180, 250, 0.15);
+    }
+
     .terminal-list-name {
       flex: 1;
       font-size: 14px;
@@ -1321,8 +1355,8 @@ function addTerminalDashboardStyles() {
       color: #94a3b8;
       border: 1px solid #334155;
       border-radius: 4px;
-      padding: 3px 8px;
-      font-size: 11px;
+      padding: 5px 12px;
+      font-size: 12px;
       font-family: 'Menlo', 'Monaco', monospace;
       cursor: pointer;
       transition: all 0.1s;

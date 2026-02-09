@@ -158,6 +158,10 @@ export function GetContainers(arg1) {
   return window['go']['main']['App']['GetContainers'](arg1);
 }
 
+export function GetDashboardFullscreen() {
+  return window['go']['main']['App']['GetDashboardFullscreen']();
+}
+
 export function GetDefaultColors() {
   return window['go']['main']['App']['GetDefaultColors']();
 }
@@ -394,6 +398,14 @@ export function GetUserMCPServers() {
   return window['go']['main']['App']['GetUserMCPServers']();
 }
 
+export function GetVoiceAutoSubmit() {
+  return window['go']['main']['App']['GetVoiceAutoSubmit']();
+}
+
+export function GetVoiceLang() {
+  return window['go']['main']['App']['GetVoiceLang']();
+}
+
 export function IncrementPromptUsage(arg1, arg2, arg3) {
   return window['go']['main']['App']['IncrementPromptUsage'](arg1, arg2, arg3);
 }
@@ -582,6 +594,10 @@ export function SetActiveTerminal(arg1, arg2) {
   return window['go']['main']['App']['SetActiveTerminal'](arg1, arg2);
 }
 
+export function SetDashboardFullscreen(arg1) {
+  return window['go']['main']['App']['SetDashboardFullscreen'](arg1);
+}
+
 export function SetTerminalFontSize(arg1) {
   return window['go']['main']['App']['SetTerminalFontSize'](arg1);
 }
@@ -592,6 +608,14 @@ export function SetTerminalTheme(arg1) {
 
 export function SetToolsPanelHeight(arg1) {
   return window['go']['main']['App']['SetToolsPanelHeight'](arg1);
+}
+
+export function SetVoiceAutoSubmit(arg1) {
+  return window['go']['main']['App']['SetVoiceAutoSubmit'](arg1);
+}
+
+export function SetVoiceLang(arg1) {
+  return window['go']['main']['App']['SetVoiceLang'](arg1);
 }
 
 export function StartContainer(arg1) {

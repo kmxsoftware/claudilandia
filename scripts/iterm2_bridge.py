@@ -297,13 +297,30 @@ async def stream_session(connection, session_id, ansi_palette):
                     cols = 80
                     rows = 25
 
-                lines = process_screen_contents(contents, ansi_palette, cols)
+                screen_lines = process_screen_contents(contents, ansi_palette, cols)
+
+                # Fetch recent scrollback (2x screen height) for extra context
+                scrollback_lines = []
+                try:
+                    line_info = await session.async_get_line_info()
+                    sb_count = line_info.scrollback_buffer_height
+                    overflow = line_info.overflow
+                    extra = rows * 2
+                    if sb_count > 0:
+                        fetch_count = min(extra, sb_count)
+                        first_line = overflow + sb_count - fetch_count
+                        sb_contents = await session.async_get_contents(first_line, fetch_count)
+                        scrollback_lines = process_line_contents(sb_contents, ansi_palette, cols)
+                except Exception:
+                    pass
+
+                lines = scrollback_lines + screen_lines
 
                 emit({
                     "type": "content",
                     "sessionId": session_id,
                     "lines": lines,
-                    "cursor": {"x": cursor_x, "y": cursor_y},
+                    "cursor": {"x": cursor_x, "y": cursor_y + len(scrollback_lines)},
                     "cols": cols,
                     "rows": rows,
                 })
@@ -390,12 +407,29 @@ async def process_command(connection, cmd_str):
                     rows = session.grid_size.height
                 except Exception:
                     cols, rows = 80, 25
-                init_lines = process_screen_contents(initial, ansi_palette, cols)
+                screen_lines = process_screen_contents(initial, ansi_palette, cols)
+
+                # Fetch recent scrollback (2x screen height) for extra context
+                scrollback_lines = []
+                try:
+                    line_info = await session.async_get_line_info()
+                    sb_count = line_info.scrollback_buffer_height
+                    overflow = line_info.overflow
+                    extra = rows * 2
+                    if sb_count > 0:
+                        fetch_count = min(extra, sb_count)
+                        first_line = overflow + sb_count - fetch_count
+                        sb_contents = await session.async_get_contents(first_line, fetch_count)
+                        scrollback_lines = process_line_contents(sb_contents, ansi_palette, cols)
+                except Exception:
+                    pass
+
+                init_lines = scrollback_lines + screen_lines
                 emit({
                     "type": "content",
                     "sessionId": session_id,
                     "lines": init_lines,
-                    "cursor": {"x": initial.cursor_coord.x, "y": initial.cursor_coord.y},
+                    "cursor": {"x": initial.cursor_coord.x, "y": initial.cursor_coord.y + len(scrollback_lines)},
                     "cols": cols,
                     "rows": rows,
                 })
