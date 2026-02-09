@@ -181,7 +181,11 @@ window.itermCloseTab = async function(sessionId) {
       stopViewing();
     }
     await CloseITermTabBySessionID(sessionId);
-    // Refresh will happen via iterm-status-changed event
+    // Remove tab from local state immediately so UI updates
+    if (dashboardState.itermStatus?.tabs) {
+      dashboardState.itermStatus.tabs = dashboardState.itermStatus.tabs.filter(t => t.sessionId !== sessionId);
+    }
+    renderTerminalDashboard();
   } catch (err) {
     console.error('Failed to close tab:', err);
   }
@@ -936,15 +940,23 @@ export function renderTerminalDashboard() {
   // Render projects list in left sidebar
   const projectsList = document.getElementById('projectsList');
   if (projectsList) {
+    const withTerminals = groups.filter(g => g.tabs.length > 0);
+    const withoutTerminals = groups.filter(g => g.tabs.length === 0);
+    const sorted = [...withTerminals, ...withoutTerminals];
+    window._projectDisplayOrder = sorted.map(g => g.name);
     projectsList.innerHTML = groups.length > 0 ? `
       <div class="terminal-list">
-        ${groups.map((g, i) => `
+        ${sorted.map((g, i) => `
+          ${i === withTerminals.length && withoutTerminals.length > 0 ? '<div class="project-separator"></div>' : ''}
           <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
                onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
-            <span class="project-number">${i + 1}</span>
-            ${g.icon ? `<span class="project-icon">${g.icon}</span>` : ''}
-            <span class="terminal-list-name">${escapeHtml(g.name)}</span>
-            ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length}</span>` : ''}
+            <div class="project-number-badge" ${g.color ? `style="background:${g.color}22;color:${g.color}"` : ''}>
+              <span class="project-number">${i + 1}</span>
+            </div>
+            <div class="project-info">
+              <span class="terminal-list-name">${g.icon ? g.icon + ' ' : ''}${escapeHtml(g.name)}</span>
+              ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length} terminal${g.tabs.length > 1 ? 's' : ''}</span>` : ''}
+            </div>
           </div>
         `).join('')}
       </div>
@@ -1203,69 +1215,95 @@ function addTerminalDashboardStyles() {
     .terminal-list {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 6px;
+    }
+
+    .project-separator {
+      height: 1px;
+      background: rgba(205, 214, 244, 0.08);
+      margin: 20px 0 4px 0;
     }
 
     .terminal-list-item {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 12px;
+      align-items: stretch;
       background: rgba(205, 214, 244, 0.04);
       border-radius: 8px;
       cursor: pointer;
       border: 1px solid rgba(205, 214, 244, 0.06);
-      border-left: 3px solid transparent;
       transition: all 0.15s;
+      overflow: hidden;
     }
 
     .terminal-list-item:hover {
-      background: rgba(205, 214, 244, 0.08);
-      border-color: rgba(205, 214, 244, 0.12);
-      border-left-color: rgba(137, 180, 250, 0.4);
+      background: rgba(205, 214, 244, 0.07);
+      border-color: rgba(205, 214, 244, 0.14);
     }
 
     .terminal-list-item.viewing {
-      background: rgba(137, 180, 250, 0.1);
-      border-color: rgba(137, 180, 250, 0.2);
-      border-left-color: #89b4fa;
+      background: rgba(137, 180, 250, 0.08);
+      border-color: rgba(137, 180, 250, 0.25);
     }
 
     .terminal-list-item.viewing .terminal-list-name {
       color: #fff;
     }
 
-    .project-number {
-      font-size: 10px;
-      font-family: 'Menlo', 'Monaco', monospace;
-      color: #585b70;
-      background: rgba(205, 214, 244, 0.06);
-      border-radius: 3px;
-      min-width: 16px;
-      height: 16px;
+    .project-number-badge {
       display: flex;
       align-items: center;
       justify-content: center;
+      min-width: 38px;
+      background: rgba(137, 180, 250, 0.1);
+      color: #89b4fa;
       flex-shrink: 0;
+      border-right: 1px solid rgba(205, 214, 244, 0.06);
     }
 
-    .terminal-list-item.viewing .project-number {
-      color: #89b4fa;
+    .terminal-list-item:hover .project-number-badge {
       background: rgba(137, 180, 250, 0.15);
     }
 
-    .terminal-list-name {
-      flex: 1;
+    .terminal-list-item.viewing .project-number-badge {
+      background: rgba(137, 180, 250, 0.2);
+      color: #89b4fa;
+    }
+
+    .project-number {
       font-size: 14px;
+      font-weight: 700;
+      font-family: 'Menlo', 'Monaco', monospace;
+    }
+
+    .project-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 8px 12px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .terminal-list-name {
+      font-size: 13px;
+      font-weight: 500;
       color: #cdd6f4;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .project-icon {
-      font-size: 14px;
-      flex-shrink: 0;
+    .terminal-list-item .card-count {
+      font-size: 10px;
+      color: #6c7086;
+      margin-top: 2px;
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    .terminal-list-item.viewing .card-count {
+      color: #89b4fa;
     }
 
     .no-terminals {

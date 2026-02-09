@@ -86,13 +86,13 @@ function handleKeydown(e) {
       return;
     }
 
-    // Cmd+1..9 -> switch to project by number
+    // Cmd+1..9 -> switch to project by display order (terminals first)
     if (!e.shiftKey && key >= '1' && key <= '9') {
       const idx = parseInt(key) - 1;
-      const projects = state.projects;
-      if (projects && idx < projects.length) {
+      const order = window._projectDisplayOrder;
+      if (order && idx < order.length) {
         e.preventDefault();
-        window.itermSelectProject?.(projects[idx].name);
+        window.itermSelectProject?.(order[idx]);
       }
       return;
     }
