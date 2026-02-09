@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
 import { updateWorkspaceInfo } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen, SaveScreenshot } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen, SaveScreenshot, GetProjectPrompts, GetGlobalPrompts, IncrementPromptUsage } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -32,6 +32,7 @@ let dashboardState = {
   fullscreen: false,           // fullscreen mode (hide sidebars/tools)
   pastedImagePath: null,       // absolute path of pasted screenshot on disk
   pastedImageBase64: null,     // base64 data URI for thumbnail preview
+  pinnedPrompts: [],            // cached pinned prompts for quick-access buttons
 };
 
 // ============================================
@@ -440,6 +441,35 @@ window.itermStopViewing = function() {
   renderTerminalDashboard();
 };
 
+window.itermSendPinnedPrompt = async function(promptId, isGlobal) {
+  if (!dashboardState.viewingSessionId) return;
+  const prompt = dashboardState.pinnedPrompts.find(p => p.id === promptId);
+  if (!prompt) return;
+  try {
+    await WriteITermTextBySessionID(dashboardState.viewingSessionId, prompt.content, true);
+    await IncrementPromptUsage(state.activeProject?.id, promptId, isGlobal);
+  } catch (err) {
+    console.error('Failed to send pinned prompt:', err);
+  }
+};
+
+async function loadPinnedPrompts() {
+  try {
+    const projectId = state.activeProject?.id;
+    const [projectPrompts, globalPrompts] = await Promise.all([
+      projectId ? GetProjectPrompts(projectId) : Promise.resolve([]),
+      GetGlobalPrompts()
+    ]);
+    const all = [
+      ...(projectPrompts || []).filter(p => p.pinned).map(p => ({ ...p, isGlobal: false })),
+      ...(globalPrompts || []).filter(p => p.pinned).map(p => ({ ...p, isGlobal: true }))
+    ];
+    dashboardState.pinnedPrompts = all;
+  } catch (err) {
+    // Ignore - prompts just won't show
+  }
+}
+
 // ============================================
 // Voice Input
 // ============================================
@@ -770,7 +800,10 @@ function isDashboardVisible() {
 
 async function refreshDashboardData() {
   try {
-    const status = await GetITermStatus();
+    const [status] = await Promise.all([
+      GetITermStatus(),
+      loadPinnedPrompts()
+    ]);
     dashboardState.itermStatus = status;
   } catch (err) {
     // Ignore
@@ -1033,6 +1066,16 @@ export function renderTerminalDashboard() {
                 <button class="key-btn" onclick="window.itermSendKey('right')">→</button>
                 <button class="key-btn" onclick="window.itermSendKey('up')">↑</button>
                 <button class="key-btn" onclick="window.itermSendKey('down')">↓</button>
+                ${dashboardState.pinnedPrompts.length > 0 ? `
+                  <span class="pinned-prompt-separator"></span>
+                  ${dashboardState.pinnedPrompts.map(p => `
+                    <button class="key-btn pinned-prompt-btn"
+                            onclick="window.itermSendPinnedPrompt('${p.id}', ${p.isGlobal})"
+                            title="${escapeHtml(p.content).replace(/"/g, '&quot;')}">
+                      ${escapeHtml(p.title)}
+                    </button>
+                  `).join('')}
+                ` : ''}
                 <span class="bridge-indicator ${dashboardState.useStyledMode ? 'active' : ''}" title="${dashboardState.useStyledMode ? 'Python bridge (styled)' : 'Not connected'}"></span>
                 <div class="voice-controls">
                   <button id="voiceMicBtn" class="voice-mic-btn voice-${dashboardState.voiceState}" onclick="window.itermToggleVoice()" title="${dashboardState.voiceState === 'listening' ? 'Stop & send' : 'Start voice'}">
@@ -1672,6 +1715,32 @@ function addTerminalDashboardStyles() {
       background: #3b82f6;
       color: white;
       border-color: #3b82f6;
+    }
+
+    .pinned-prompt-separator {
+      width: 1px;
+      height: 18px;
+      background: #334155;
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .pinned-prompt-btn {
+      background: rgba(137, 180, 250, 0.08) !important;
+      border-color: rgba(137, 180, 250, 0.2) !important;
+      color: #89b4fa !important;
+    }
+
+    .pinned-prompt-btn:hover {
+      background: rgba(137, 180, 250, 0.15) !important;
+      color: #b4d0fb !important;
+      border-color: rgba(137, 180, 250, 0.35) !important;
+    }
+
+    .pinned-prompt-btn:active {
+      background: #3b82f6 !important;
+      color: white !important;
+      border-color: #3b82f6 !important;
     }
 
     .command-input-bar {
