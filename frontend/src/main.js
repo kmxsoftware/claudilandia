@@ -393,6 +393,10 @@ function render() {
               <div id="gitFileList" class="git-file-list"></div>
             </div>
           </div>
+
+          <div class="sidebar-shortcuts-hint" onclick="window.showShortcutsModal()">
+            <span class="shortcuts-hint-key">⌘K</span> Shortcuts
+          </div>
         </div>
 
         <!-- Sidebar Resizer -->
@@ -653,6 +657,39 @@ function render() {
 
     <!-- Screenshot Gallery Modal -->
     ${renderScreenshotGalleryModal()}
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcutsModal" class="modal hidden">
+      <div class="modal-content shortcuts-modal-content">
+        <h2>Keyboard Shortcuts</h2>
+        <div class="shortcuts-grid">
+          <div class="shortcuts-section">
+            <h3>Navigation</h3>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>1</kbd>-<kbd>9</kbd><span>Switch project</span></div>
+            <div class="shortcut-row"><kbd>⇧</kbd><kbd>↑</kbd><kbd>↓</kbd><span>Prev / next project</span></div>
+            <div class="shortcut-row"><kbd>⇧</kbd><kbd>←</kbd><kbd>→</kbd><span>Prev / next tab</span></div>
+          </div>
+          <div class="shortcuts-section">
+            <h3>Terminal</h3>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>↵</kbd><span>Send Enter to iTerm</span></div>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>↑</kbd><kbd>↓</kbd><span>Send arrow to iTerm</span></div>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>⇥</kbd><span>Send Shift+Tab to iTerm</span></div>
+            <div class="shortcut-row"><kbd>⇧</kbd><kbd>⇥</kbd><span>Send Shift+Tab</span></div>
+            <div class="shortcut-row"><kbd>Esc</kbd><span>Send ESC to iTerm</span></div>
+            <div class="shortcut-row"><kbd>Esc</kbd><kbd>Esc</kbd><span>Clear command input</span></div>
+          </div>
+          <div class="shortcuts-section">
+            <h3>Tools</h3>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>R</kbd><span>Toggle voice input</span></div>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>P</kbd><span>Toggle pomodoro</span></div>
+            <div class="shortcut-row"><kbd>⌘</kbd><kbd>K</kbd><span>This dialog</span></div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary-btn" onclick="document.getElementById('shortcutsModal').classList.add('hidden')">Close</button>
+        </div>
+      </div>
+    </div>
   `;
 
   // Setup event listeners

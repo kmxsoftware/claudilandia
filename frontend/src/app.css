@@ -6075,6 +6075,83 @@ body.wails-fullscreen .titlebar-drag-region {
   flex: 1;
 }
 
+/* Shortcuts hint in sidebar */
+.sidebar-shortcuts-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  color: #585b70;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.sidebar-shortcuts-hint:hover {
+  color: #a6adc8;
+}
+
+.shortcuts-hint-key {
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 10px;
+  background: rgba(205, 214, 244, 0.08);
+  border: 1px solid rgba(205, 214, 244, 0.1);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* Shortcuts modal */
+.shortcuts-modal-content {
+  max-width: 520px;
+  width: 100%;
+}
+
+.shortcuts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.shortcuts-section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #89b4fa;
+  margin: 0 0 8px 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #a6adc8;
+}
+
+.shortcut-row span {
+  margin-left: auto;
+  color: #cdd6f4;
+  font-size: 12px;
+}
+
+.shortcut-row kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  background: rgba(205, 214, 244, 0.08);
+  border: 1px solid rgba(205, 214, 244, 0.15);
+  border-radius: 4px;
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 11px;
+  color: #cdd6f4;
+}
+
 /* Dashboard fullscreen mode — show only left sidebar, terminal dashboard, and right sidebar */
 .dashboard-fullscreen .panel-tabs,
 .dashboard-fullscreen .browser-tabs-bar,

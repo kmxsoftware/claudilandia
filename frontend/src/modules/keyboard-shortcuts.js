@@ -6,6 +6,7 @@ import { GIT_TAB_ID } from './git-dashboard.js';
 import { QA_TAB_ID } from './test-dashboard.js';
 import { STRUCTURE_TAB_ID } from './structure-panel.jsx';
 import { DOCKER_TAB_ID, REMOTE_TAB_ID, switchToDashboardTab, switchToGitTab, switchToQATab, switchToStructureTabLocal, switchToDockerTab, switchToRemoteTab } from './browser.js';
+import { togglePomodoro } from './pomodoro.js';
 
 // Ordered tab IDs and their switch functions
 const TAB_ORDER = [
@@ -68,6 +69,20 @@ function handleKeydown(e) {
     if (!e.shiftKey && key === 'r') {
       e.preventDefault();
       window.itermToggleVoice?.();
+      return;
+    }
+
+    // Cmd+P -> toggle pomodoro timer
+    if (!e.shiftKey && key === 'p') {
+      e.preventDefault();
+      togglePomodoro();
+      return;
+    }
+
+    // Cmd+K -> toggle shortcuts modal
+    if (!e.shiftKey && key === 'k') {
+      e.preventDefault();
+      window.showShortcutsModal?.();
       return;
     }
 
@@ -162,6 +177,20 @@ function switchTab(direction) {
   TAB_ORDER[nextIndex].switch();
 }
 
+window.showShortcutsModal = function() {
+  const modal = document.getElementById('shortcutsModal');
+  if (!modal) return;
+  modal.classList.toggle('hidden');
+};
+
 export function initKeyboardShortcuts() {
   document.addEventListener('keydown', handleKeydown);
+
+  // Close shortcuts modal on outside click
+  document.addEventListener('click', (e) => {
+    const modal = document.getElementById('shortcutsModal');
+    if (modal && e.target === modal) {
+      modal.classList.add('hidden');
+    }
+  });
 }

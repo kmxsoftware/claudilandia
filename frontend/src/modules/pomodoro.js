@@ -123,6 +123,15 @@ function startTimer() {
   renderPomodoro();
 }
 
+// Toggle start/pause
+export function togglePomodoro() {
+  if (state.pomodoro.isRunning) {
+    pauseTimer();
+  } else {
+    startTimer();
+  }
+}
+
 // Pause the timer
 function pauseTimer() {
   if (timerInterval) {
