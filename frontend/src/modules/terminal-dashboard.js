@@ -889,10 +889,10 @@ export function renderTerminalDashboard() {
                   <span class="term-tab-close" onclick="event.stopPropagation(); window.itermCloseTab('${tab.sessionId}')" title="Close terminal">×</span>
                 </button>
               `).join('')}
+              ${isRealProject ? `<button class="term-tab-btn term-add-tab" onclick="window.itermCreateTab()" title="New Terminal">+</button>` : ''}
             </div>
             <div class="terminal-controls">
               ${dashboardState.viewingSessionId ? `
-                <button class="history-load-btn" onclick="window.itermFocusSession('${dashboardState.viewingSessionId}')" title="Focus in iTerm2">⌖</button>
                 <button class="history-load-btn ${dashboardState.historyLines ? 'loaded' : ''}" onclick="window.itermLoadHistory()" title="${dashboardState.historyLines ? 'History loaded' : 'Load scrollback history'}">⇡</button>
               ` : ''}
               <div class="terminal-font-controls">
@@ -912,7 +912,6 @@ export function renderTerminalDashboard() {
                 </div>
               </div>
             </div>
-            ${isRealProject ? `<button class="term-add-btn" onclick="window.itermCreateTab()" title="New Terminal">+</button>` : ''}
           </div>
 
           <!-- Output viewer -->
@@ -1188,16 +1187,17 @@ function addTerminalDashboardStyles() {
     .terminal-tabs-bar {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 8px 12px;
-      border-bottom: 1px solid #334155;
+      gap: 8px;
+      padding: 0 12px;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
       flex-shrink: 0;
       overflow: hidden;
     }
 
     .terminal-tabs-scroll {
       display: flex;
-      gap: 4px;
+      gap: 0;
       flex: 1;
       overflow-x: auto;
       min-width: 0;
@@ -1208,11 +1208,12 @@ function addTerminalDashboardStyles() {
     .term-tab-btn {
       appearance: none;
       border: none;
-      background: #0f172a;
-      color: #94a3b8;
-      padding: 5px 12px;
+      background: transparent;
+      color: #585b70;
+      padding: 8px 14px;
       font-size: 12px;
-      border-radius: 6px;
+      border-radius: 0;
+      border-bottom: 2px solid transparent;
       cursor: pointer;
       white-space: nowrap;
       display: flex;
@@ -1223,13 +1224,14 @@ function addTerminalDashboardStyles() {
     }
 
     .term-tab-btn:hover {
-      background: #1e293b;
-      color: #e2e8f0;
+      background: rgba(205, 214, 244, 0.04);
+      color: #a6adc8;
     }
 
     .term-tab-btn.active {
-      background: #3b82f6;
-      color: white;
+      background: rgba(205, 214, 244, 0.06);
+      color: #cdd6f4;
+      border-bottom-color: #89b4fa;
     }
 
     .term-tab-focus {
@@ -1258,25 +1260,16 @@ function addTerminalDashboardStyles() {
       padding: 4px 8px;
     }
 
-    .term-add-btn {
-      margin-left: 8px;
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      border: none;
-      border-radius: 6px;
-      background: #3b82f6;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.15s;
+    .term-add-tab {
+      padding: 8px 10px !important;
+      color: #585b70 !important;
+      font-size: 14px !important;
+      min-width: 0;
     }
 
-    .term-add-btn:hover { background: #2563eb; }
+    .term-add-tab:hover {
+      color: #89b4fa !important;
+    }
 
     .term-refresh-btn {
       width: 24px;
