@@ -2,9 +2,9 @@
 
 import { state } from './state.js';
 import { registerStateHandler, switchProject } from './project-switcher.js';
-import { updateWorkspaceInfo } from './projects.js';
+import { updateWorkspaceInfo, openEditProjectModal, selectProject } from './projects.js';
 import { TERMINAL_THEMES, getThemeByName } from './terminal-themes.js';
-import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen, SaveScreenshot, GetProjectPrompts, GetGlobalPrompts, IncrementPromptUsage } from '../../wailsjs/go/main/App';
+import { GetITermSessionInfo, GetITermStatus, SwitchITermTabBySessionID, CreateITermTab, RenameITermTabBySessionID, CloseITermTabBySessionID, WatchITermSession, UnwatchITermSession, WriteITermTextBySessionID, SendITermSpecialKey, GetTerminalTheme, SetTerminalTheme, GetTerminalFontSize, SetTerminalFontSize, GetITermSessionContentsByID, StartVoiceRecognition, StopVoiceRecognition, FocusITerm, RequestStyledHistory, GetVoiceLang, SetVoiceLang, GetVoiceAutoSubmit, SetVoiceAutoSubmit, GetDashboardFullscreen, SetDashboardFullscreen, SaveScreenshot, GetProjectPrompts, GetGlobalPrompts, IncrementPromptUsage, DeleteProject } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Dashboard state
@@ -114,6 +114,80 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// Show context menu for project items (Edit / Delete)
+function showProjectContextMenu(e, projectName) {
+  // Remove any existing context menu
+  const existing = document.querySelector('.project-context-menu');
+  if (existing) existing.remove();
+
+  const project = (state.projects || []).find(p => p.name === projectName);
+  if (!project) return;
+
+  const safeName = escapeHtml(project.name).replace(/'/g, "\\'");
+
+  const menu = document.createElement('div');
+  menu.className = 'prompt-context-menu project-context-menu';
+  menu.innerHTML = `
+    <button class="context-menu-item" onclick="window._projectCtxEdit('${safeName}')">Edit</button>
+    <button class="context-menu-item danger" onclick="window._projectCtxDelete('${safeName}')">Delete</button>
+  `;
+
+  menu.style.position = 'fixed';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+
+  document.body.appendChild(menu);
+
+  // Close on click outside
+  const closeMenu = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('mousedown', closeMenu);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
+}
+
+function dismissProjectContextMenu() {
+  const menu = document.querySelector('.project-context-menu');
+  if (menu) menu.remove();
+}
+
+window._projectCtxEdit = async function(projectName) {
+  dismissProjectContextMenu();
+  const project = (state.projects || []).find(p => p.name === projectName);
+  if (!project) return;
+  if (state.activeProject?.id !== project.id) {
+    await selectProject(project.id);
+  }
+  openEditProjectModal();
+};
+
+window._projectCtxDelete = async function(projectName) {
+  dismissProjectContextMenu();
+  const project = (state.projects || []).find(p => p.name === projectName);
+  if (!project) {
+    alert('Project not found: ' + projectName);
+    return;
+  }
+  try {
+    await DeleteProject(project.id);
+    const idx = state.projects.findIndex(p => p.id === project.id);
+    if (idx >= 0) state.projects.splice(idx, 1);
+    if (state.activeProject?.id === project.id) {
+      if (state.projects.length > 0) {
+        await selectProject(state.projects[0].id);
+      } else {
+        state.activeProject = null;
+      }
+      updateWorkspaceInfo();
+    }
+    renderTerminalDashboard();
+  } catch (err) {
+    alert('Error deleting project: ' + err);
+  }
+};
 
 // ============================================
 // Window handlers
@@ -982,18 +1056,30 @@ export function renderTerminalDashboard() {
         ${sorted.map((g, i) => `
           ${i === withTerminals.length && withoutTerminals.length > 0 ? '<div class="project-separator"></div>' : ''}
           <div class="terminal-list-item ${g.name === dashboardState.selectedProjectName ? 'viewing' : ''}"
+               data-project-name="${escapeHtml(g.name)}"
                onclick="window.itermSelectProject('${escapeHtml(g.name).replace(/'/g, "\\'")}')">
             <div class="project-number-badge" ${g.color ? `style="background:${g.color}22;color:${g.color}"` : ''}>
               <span class="project-number">${i + 1}</span>
             </div>
             <div class="project-info">
-              <span class="terminal-list-name">${g.icon ? g.icon + ' ' : ''}${escapeHtml(g.name)}</span>
+              <span class="terminal-list-name">${escapeHtml(g.name)}</span>
               ${g.tabs.length > 0 ? `<span class="card-count">${g.tabs.length} terminal${g.tabs.length > 1 ? 's' : ''}</span>` : ''}
             </div>
+            ${g.icon ? `<span class="project-icon-right">${g.icon}</span>` : ''}
           </div>
         `).join('')}
       </div>
     ` : `<div class="no-terminals">No terminals open in iTerm2</div>`;
+
+    // Attach context menu to project items
+    projectsList.querySelectorAll('.terminal-list-item[data-project-name]').forEach(item => {
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const projectName = item.dataset.projectName;
+        if (projectName === 'Other') return;
+        showProjectContextMenu(e, projectName);
+      });
+    });
   }
 
   // Update fullscreen button state

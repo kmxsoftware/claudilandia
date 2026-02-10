@@ -809,7 +809,8 @@ function setupSidebarResizer() {
   document.addEventListener('mousemove', (e) => {
     if (!isResizing) return;
     const deltaX = e.clientX - startX;
-    const newWidth = Math.min(400, Math.max(180, startWidth + deltaX));
+    const maxWidth = window.innerWidth * 0.8;
+    const newWidth = Math.min(maxWidth, Math.max(180, startWidth + deltaX));
     sidebar.style.width = `${newWidth}px`;
   });
 
@@ -846,7 +847,8 @@ function setupRightSidebarResizer() {
     if (!isResizing) return;
     // For right sidebar, dragging left increases width
     const deltaX = startX - e.clientX;
-    const newWidth = Math.min(500, Math.max(200, startWidth + deltaX));
+    const maxWidth = window.innerWidth * 0.8;
+    const newWidth = Math.min(maxWidth, Math.max(200, startWidth + deltaX));
     sidebar.style.width = `${newWidth}px`;
   });
 

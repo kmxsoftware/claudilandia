@@ -69,7 +69,6 @@ body.wails-fullscreen .titlebar-drag-region {
 .sidebar {
   width: 240px;
   min-width: 180px;
-  max-width: 400px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -82,7 +81,6 @@ body.wails-fullscreen .titlebar-drag-region {
 .sidebar.right-sidebar {
   width: 280px;
   min-width: 200px;
-  max-width: 500px;
   border-right: none;
   border-left: 1px solid var(--border);
   height: 100%;
@@ -332,6 +330,33 @@ body.wails-fullscreen .titlebar-drag-region {
   color: var(--text-muted);
   font-style: italic;
   font-size: 13px;
+}
+
+.terminal-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.terminal-list-item {
+  display: flex;
+  align-items: center;
+  max-width: 300px;
+  width: 100%;
+}
+
+.terminal-list-item .project-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-list-item .project-icon-right {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
 .terminal-item {
